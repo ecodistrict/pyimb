@@ -125,7 +125,7 @@ class Message(object):
     def payload(self, value):
         self._payload = value
         self.length = len(value) if value else 0
-       
+                                                                                                              
 
     
 class Client(asynchat.async_chat):

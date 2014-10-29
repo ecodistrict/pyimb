@@ -1,6 +1,9 @@
 import imb
 c = imb.Client()
-c.imb_connect(imb.TEST_URL,4000,123,'rasmus132','ecodistrict')
+owner_id = 123
+owner_name = 'rasmus'
+federation = 'ecodistrict'
+c.imb_connect(imb.TEST_URL, imb.TEST_PORT, owner_id, owner_name, federation)
 c.signal_subscribe(0, 0, 'anything')
 #input()
 c.signal_publish(0,0, 'anything')
