@@ -88,8 +88,8 @@ logging.basicConfig(format='[%(levelname)8s] %(message)s', level=logging.DEBUG)
 TEST_URL = 'imb.lohman-solutions.com'
 TEST_PORT = 4000
 
-class ClientModes(Enum):
-    """docstring for ClientModes"""
+class ClientStates(Enum):
+    """docstring for ClientStates"""
     waiting = 0
     header = 1
     payload = 2
@@ -137,17 +137,30 @@ class Command(object):
 class Client(asynchat.async_chat):
     """docstring for Client"""
     def __init__(self, *args, **kwargs):
-        self.map = {}
-        super(Client, self).__init__(map=self.map, *args, **kwargs)
+        self._channels_map = {}
+        super(Client, self).__init__(map=self._channels_map, *args, **kwargs)
         
-        self.set_terminator(MAGIC_BYTES)
         self._ibuffer = []
-        self._state = ClientModes.waiting
+        self._state = None
+        self._set_state(ClientStates.waiting)
         self._command = None
 
         self._event_id_translation = {} # hub ID to client ID
         self._event_names = {}
         self._next_event_id = 0
+
+    def _set_state(self, state):
+        self._state = state
+        
+        if state is ClientStates.waiting:
+            self.set_terminator(MAGIC_BYTES)
+        elif state is ClientStates.header:
+            self.set_terminator(HEADER_LENGTH)
+        elif state is ClientStates.payload:
+            self.set_terminator(END_PAYLOAD_MAGIC_BYTES)
+        else:
+            raise NotImplementedError()
+            
 
     @property
     def federation(self):
@@ -161,57 +174,53 @@ class Client(asynchat.async_chat):
     def client_id(self):
         return self._client_id
     
-    def imb_connect(self, host, port, owner_id=None, owner_name=None, federation=None):
+    def connect(self, host, port, owner_id=None, owner_name=None, federation=None):
         self._federation = federation
         logging.info(
             'Connecting to {0}:{1}. Owner ID: {2}; Owner name: {3}; Federation: {4}.'.format(
                 host, port, owner_id, owner_name, federation))
         
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connect((host, port))
-        t = threading.Thread(target=partial(asyncore.loop, map=self.map))
+        super(Client, self).connect((host, port))
+        t = threading.Thread(target=partial(asyncore.loop, map=self._channels_map))
         t.start()
         
-        self.signal_client_info(owner_id, owner_name)
+        self._signal_client_info(owner_id, owner_name)
 
     def handle_connect(self):
-        logging.info('Connected!')
+        logging.info('Connected to {0}:{1}'.format(*self.socket.getpeername()))
         super(Client, self).handle_connect()
 
     def collect_incoming_data(self, data):
         self._ibuffer.append(data)
 
-    def close(self):
-        logging.info('Closing connection to {0}'.format(self.socket.getpeername()))
+    def _close_socket(self):
+        logging.info('Closing connection to {0}'.format(*self.socket.getpeername()))
         self.socket.shutdown(socket.SHUT_RDWR)
-        super(Client, self).close()
+        self.close()
 
     def found_terminator(self):
-        if self._state is ClientModes.waiting:
+        if self._state is ClientStates.waiting:
             self._ibuffer = []
-            self._state = ClientModes.header
-            self.set_terminator(HEADER_LENGTH)
+            self._set_state(ClientStates.header)
 
-        elif self._state is ClientModes.header:
+        elif self._state is ClientStates.header:
             command_code, payload_length = decode_header(b''.join(self._ibuffer))
             self._command = Command(command_code=command_code)
             self._ibuffer = []
             if payload_length == 0:
-                self.set_terminator(MAGIC_BYTES)
-                self._state = ClientModes.waiting
-                self.handle_command(self._command)
+                self._handle_command(self._command)
+                self._set_state(ClientStates.waiting)
             else:
-                self.set_terminator(END_PAYLOAD_MAGIC_BYTES)
-                self._state = ClientModes.payload
+                self._set_state(ClientStates.payload)
 
-        elif self._state is ClientModes.payload:
+        elif self._state is ClientStates.payload:
+            self._set_state(ClientStates.waiting)
             self._command.payload = b''.join(self._ibuffer)
-            self.set_terminator(MAGIC_BYTES)
-            self._state = ClientModes.waiting
-            self.handle_command(self._command)
+            self._handle_command(self._command)
     
 
-    def handle_command(self, command):
+    def _handle_command(self, command):
 
         if command.command_code == icEvent:
             hub_event_id = decode_Int32(command.payload[0:4])
@@ -220,11 +229,11 @@ class Client(asynchat.async_chat):
             event_kind = decode_UInt32(command.payload[8:12])
             event_payload = command.payload[12:]
             logging.debug((
-                'Received handle event command. Hub id: {0}; Client id: {1}; '
+                'Received icEvent. Hub id: {0}; Client id: {1}; '
                 'Event kind: {2}; Payload length: {3}').format(
                     hub_event_id, client_event_id, event_kind, len(event_payload)))
 
-            self.handle_event(client_event_id, event_kind, event_payload)
+            self._handle_event(client_event_id, event_kind, event_payload)
 
 
         elif command.command_code == icSetEventIDTranslation:
@@ -235,32 +244,33 @@ class Client(asynchat.async_chat):
             else:
                 del self._event_id_translation[hub_event_id]
 
-            logging.debug('Handled event id translation. Hub id: {0}; Client id: {1}'.format(
+            logging.debug("Handled icSetEventIDTranslation. Hub's event id: {0}; Client's event id: {1}.".format(
                 hub_event_id, client_event_id))
 
         elif command.command_code == icUniqueClientID:
+
             self._unique_client_id = decode_UInt32(command.payload[0:4])
             self._client_id = decode_UInt32(command.payload[4:8])
 
-            logging.debug('Handled unique client id. Unique client id: {0}; Client id: {1}'.format(
+            logging.debug('Handled icUniqueClientID. Unique client id: {0}; Client id: {1}'.format(
                 self._unique_client_id, self._client_id))
 
         elif command.command_code == icEndSession:
             self.end_session()
 
-            logging.debug('Handled end session.')
+            logging.debug('Handled icEndSession.')
 
         else:
             pass
 
-    def handle_event(self, event_id, event_kind, event_payload):
+    def _handle_event(self, event_id, event_kind, event_payload):
         raise NotImplementedError()
 
         
     def end_session(self):
-        self.close()
+        self._close_socket()
 
-    def signal_command(self, message):
+    def _signal_command(self, message):
         parts = [
             MAGIC_BYTES,
             encode_Int32(message.command_code),
@@ -273,64 +283,64 @@ class Client(asynchat.async_chat):
 
         self.push(b''.join(parts))
 
-    def signal_client_info(self, owner_id, owner_name):
+    def _signal_client_info(self, owner_id, owner_name):
         payload = b''.join([
             encode_Int32(owner_id),
             encode_string(owner_name)])
 
-        self.signal_command(Command(command_code=icSetClientInfo, payload=payload))
+        self._signal_command(Command(command_code=icSetClientInfo, payload=payload))
 
-    def signal_subscribe(self, event_id, event_entry_type, event_name):
+    def _signal_subscribe(self, event_id, event_entry_type, event_name):
         payload = b''.join([
             encode_Int32(event_id),
             encode_Int32(event_entry_type),
             encode_string(event_name)])
 
-        self.signal_command(Command(command_code=icSubscribe, payload=payload))
+        self._signal_command(Command(command_code=icSubscribe, payload=payload))
 
-    def signal_publish(self, event_id, event_entry_type, event_name):
+    def _signal_publish(self, event_id, event_entry_type, event_name):
         payload = b''.join([
             encode_Int32(event_id),
             encode_Int32(event_entry_type),
             encode_string(event_name)])
 
-        self.signal_command(Command(command_code=icPublish, payload=payload))
+        self._signal_command(Command(command_code=icPublish, payload=payload))
 
-    def signal_unsubscribe(self, event_name):
+    def _signal_unsubscribe(self, event_name):
         payload = encode_string(event_name)
 
-        self.signal_command(Command(command_code=icUnsubscribe, payload=payload))
+        self._signal_command(Command(command_code=icUnsubscribe, payload=payload))
 
-    def signal_unpublish(self, event_name):
+    def _signal_unpublish(self, event_name):
         payload = encode_string(event_name)
 
-        self.signal_command(Command(command_code=icUnpublish, payload=payload))
+        self._signal_command(Command(command_code=icUnpublish, payload=payload))
 
-    def signal_normal_event(self, event_id, event_kind, event_payload):
+    def _signal_normal_event(self, event_id, event_kind, event_payload):
         payload = b''.join([
             encode_Int32(event_id),
             encode_Int32(0),
             encode_Int32(event_kind),
             event_payload])
 
-        self.signal_command(Command(command_code=icEvent, payload=payload))
+        self._signal_command(Command(command_code=icEvent, payload=payload))
 
-    def signal_change_object(self, event_id, action, object_id, attribute):
+    def _signal_change_object(self, event_id, action, object_id, attribute):
         event_payload = b''.join([
             encode_Int32(action),
             encode_Int32(object_id),
             encode_string(attribute)])
 
-        self.signal_normal_event(event_id, ekChangeObjectEvent, event_payload)
+        self._signal_normal_event(event_id, ekChangeObjectEvent, event_payload)
 
     def subscribe(self, event_name, prefix=True):
         if prefix:
             event_name = self.federation + '.' + event_name
 
-        event_id = _add_or_set_event(event_name)
+        event_id = self._add_or_set_event(event_name)
 
         event_entry_type = 0
-        self.signal_subscribe(event_id, event_entry_type, event_name)
+        self._signal_subscribe(event_id, event_entry_type, event_name)
 
     def unsubscribe(self, event_name, prefix=True):
         if prefix:
@@ -338,16 +348,16 @@ class Client(asynchat.async_chat):
 
         # event_id = self._try_get_event_id(event_name)
 
-        self.signal_unsubscribe(event_name)
+        self._signal_unsubscribe(event_name)
 
     def publish(self, event_name, prefix=True):
         if prefix:
             event_name = self.federation + '.' + event_name
 
-        event_id = _add_or_set_event(event_name)
+        event_id = self._add_or_set_event(event_name)
 
         event_entry_type = 0
-        self.signal_publish(event_id, event_entry_type, event_name)
+        self._signal_publish(event_id, event_entry_type, event_name)
 
     def unpublish(self, event_name, prefix=True):
         if prefix:
@@ -355,7 +365,7 @@ class Client(asynchat.async_chat):
 
         # event_id = self._try_get_event_id(event_name)
 
-        self.signal_unpublish(event_name)
+        self._signal_unpublish(event_name)
 
     def _try_get_event_id(self, event_name):
         event_id = None
