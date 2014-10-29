@@ -168,6 +168,27 @@ class EventDefinition(object):
     def handle_event(self, event_kind, event_payload):
         for handler in self.handlers:
             handler(event_kind, event_payload)
+
+    def signal_event(self, event_kind, event_payload):
+        if not self._is_published:
+            self.publish()
+        self.client.signal_normal_event(self.event_id, event_kind, event_payload)
+
+    def signal_change_object(self, action, object_id, attribute):
+        event_payload = b''.join([
+            encode_int32(action),
+            encode_int32(object_id),
+            encode_string(attribute)])
+
+        self.signal_event(ekChangeObjectEvent, event_payload)
+
+    def signal_string(self, value):
+        event_kind = ekNormalEvent
+        payload = encode_string(value)
+        self.signal_event(event_kind, payload)
+
+    def signal_stream(self):
+        raise NotImplementedError()
         
 
 class Command(object):
@@ -373,15 +394,7 @@ class Client(asynchat.async_chat):
             encode_int32(event_kind),
             event_payload])
 
-        self._signal_command(Command(command_code=icEvent, payload=payload))
-
-    def signal_change_object(self, event_id, action, object_id, attribute):
-        event_payload = b''.join([
-            encode_int32(action),
-            encode_int32(object_id),
-            encode_string(attribute)])
-
-        self.signal_normal_event(event_id, ekChangeObjectEvent, event_payload)
+        self._signal_command(Command(command_code=icEvent, payload=payload))    
 
     def subscribe(self, event_name, prefix=True):
         if prefix:
