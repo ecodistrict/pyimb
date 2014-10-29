@@ -96,24 +96,24 @@ class ClientStates(Enum):
 
         
 def decode_header(header):
-    return (decode_Int32(header[0:4]), decode_Int32(header[4:]))
+    return (decode_int32(header[0:4]), decode_int32(header[4:]))
 
-def encode_Int32(value):
+def encode_int32(value):
     return value.to_bytes(4, BYTEORDER, signed=True)
 
-def decode_Int32(value):
+def decode_int32(value):
     return int.from_bytes(value, BYTEORDER, signed=True)
 
-def encode_UInt32(value):
+def encode_uint32(value):
     return value.to_bytes(4, BYTEORDER, signed=False)
 
-def decode_UInt32(value):
+def decode_uint32(value):
     return int.from_bytes(value, BYTEORDER, signed=False)
 
 def encode_string(value):
     encoded = value.encode(DEFAULT_ENCODING)
     return b''.join([
-        encode_Int32(len(encoded)),
+        encode_int32(len(encoded)),
         encoded])
 
 class EventDefinition(object):
@@ -267,10 +267,10 @@ class Client(asynchat.async_chat):
     def _handle_command(self, command):
 
         if command.command_code == icEvent:
-            hub_event_id = decode_Int32(command.payload[0:4])
+            hub_event_id = decode_int32(command.payload[0:4])
             client_event_id = self._event_id_translation[hub_event_id]
             # Here, we could get the tick (payload[4:8]), but we don't
-            event_kind = decode_UInt32(command.payload[8:12])
+            event_kind = decode_uint32(command.payload[8:12])
             event_payload = command.payload[12:]
             logging.debug((
                 'Received icEvent. Hub id: {0}; Client id: {1}; '
@@ -281,8 +281,8 @@ class Client(asynchat.async_chat):
 
 
         elif command.command_code == icSetEventIDTranslation:
-            hub_event_id = decode_Int32(command.payload[0:4])
-            client_event_id = decode_Int32(command.payload[4:8])
+            hub_event_id = decode_int32(command.payload[0:4])
+            client_event_id = decode_int32(command.payload[4:8])
             if client_event_id >= 0:
                 self._event_id_translation[hub_event_id] = client_event_id
             else:
@@ -293,8 +293,8 @@ class Client(asynchat.async_chat):
 
         elif command.command_code == icUniqueClientID:
 
-            self._unique_client_id = decode_UInt32(command.payload[0:4])
-            self._client_id = decode_UInt32(command.payload[4:8])
+            self._unique_client_id = decode_uint32(command.payload[0:4])
+            self._client_id = decode_uint32(command.payload[4:8])
 
             logging.debug('Handled icUniqueClientID. Unique client id: {0}; Client id: {1}'.format(
                 self._unique_client_id, self._client_id))
@@ -334,8 +334,8 @@ class Client(asynchat.async_chat):
     def _signal_command(self, message):
         parts = [
             MAGIC_BYTES,
-            encode_Int32(message.command_code),
-            encode_Int32(message.length)]
+            encode_int32(message.command_code),
+            encode_int32(message.length)]
 
         if message.payload:
             if len(message.payload) > 0:
@@ -346,23 +346,23 @@ class Client(asynchat.async_chat):
 
     def _signal_client_info(self, owner_id, owner_name):
         payload = b''.join([
-            encode_Int32(owner_id),
+            encode_int32(owner_id),
             encode_string(owner_name)])
 
         self._signal_command(Command(command_code=icSetClientInfo, payload=payload))
 
     def signal_subscribe(self, event_id, event_entry_type, event_name):
         payload = b''.join([
-            encode_Int32(event_id),
-            encode_Int32(event_entry_type),
+            encode_int32(event_id),
+            encode_int32(event_entry_type),
             encode_string(event_name)])
 
         self._signal_command(Command(command_code=icSubscribe, payload=payload))
 
     def signal_publish(self, event_id, event_entry_type, event_name):
         payload = b''.join([
-            encode_Int32(event_id),
-            encode_Int32(event_entry_type),
+            encode_int32(event_id),
+            encode_int32(event_entry_type),
             encode_string(event_name)])
 
         self._signal_command(Command(command_code=icPublish, payload=payload))
@@ -379,17 +379,17 @@ class Client(asynchat.async_chat):
 
     def signal_normal_event(self, event_id, event_kind, event_payload):
         payload = b''.join([
-            encode_Int32(event_id),
-            encode_Int32(0),
-            encode_Int32(event_kind),
+            encode_int32(event_id),
+            encode_int32(0),
+            encode_int32(event_kind),
             event_payload])
 
         self._signal_command(Command(command_code=icEvent, payload=payload))
 
     def signal_change_object(self, event_id, action, object_id, attribute):
         event_payload = b''.join([
-            encode_Int32(action),
-            encode_Int32(object_id),
+            encode_int32(action),
+            encode_int32(object_id),
             encode_string(attribute)])
 
         self.signal_normal_event(event_id, ekChangeObjectEvent, event_payload)
