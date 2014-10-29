@@ -175,15 +175,12 @@ class Client(asynchat.async_chat):
         super(Client, self).close()
 
     def found_terminator(self):
-        logging.debug('Found terminator in mode {0}.'.format(self._state))
         if self._state is ClientModes.waiting:
             self._ibuffer = []
             self._state = ClientModes.header
             self.set_terminator(HEADER_LENGTH)
         elif self._state is ClientModes.header:
             command, payload_length = decode_header(b''.join(self._ibuffer))
-            logging.debug(
-                'Expecting command {0} with payload length {1}.'.format(command, payload_length))
             self.message = Message(command=command)
             self._ibuffer = []
             if payload_length == 0:
@@ -220,8 +217,6 @@ class Client(asynchat.async_chat):
         payload = b''.join([
             encode_Int32(owner_id),
             encode_string(owner_name)])
-
-        logging.debug('Signalling client info. Payload: {0}'.format(payload))
 
         self.signal_message(Message(command=icSetClientInfo, payload=payload))
 
