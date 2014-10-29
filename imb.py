@@ -24,9 +24,13 @@ class ClientModes(Enum):
     payload = 2
         
 def decode_header(header):
-    return (
-        int.from_bytes(header[0:CMD_LENGTH], BYTEORDER, signed=True),
-        int.from_bytes(header[CMD_LENGTH:], BYTEORDER, signed=True))
+    return (decode_Int32(header[0:4]), decode_Int32(header[4:]))
+
+def encode_Int32(value):
+    return value.to_bytes(4, BYTEORDER, signed=True)
+
+def decode_Int32(value):
+    return int.from_bytes(value, BYTEORDER, signed=True)
 
 class Message(object):
     """docstring for Message"""
@@ -35,11 +39,6 @@ class Message(object):
         self.command = command
         self.payload = payload
 
-    @property
-    def header(self):
-        return (
-            self.command.to_bytes(CMD_LENGTH, BYTEORDER, signed=True) + 
-            self.length.to_bytes(PAYLOAD_SIZE_LENGTH, BYTEORDER, signed=True))
 
     @property
     def payload(self):
@@ -48,6 +47,8 @@ class Message(object):
     def payload(self, value):
         self._payload = value
         self.length = len(value) if value else 0
+
+
     
     
     
@@ -74,22 +75,20 @@ class Client(asynchat.async_chat):
 
     def collect_incoming_data(self, data):
         self._ibuffer.append(data)
-        logging.debug('{0}: appended {1} to buffer'.format(self.socket.getpeername(), str(data)))
 
     def close(self):
         logging.info('Closing connection to {0}'.format(self.socket.getpeername()))
         super(Client, self).close()
 
     def found_terminator(self):
-        logging.info('Found terminator in mode {0}.'.format(self._state))
+        logging.debug('Found terminator in mode {0}.'.format(self._state))
         if self._state is ClientModes.waiting:
             self._ibuffer = []
             self._state = ClientModes.header
             self.set_terminator(HEADER_LENGTH)
         elif self._state is ClientModes.header:
-            print(self._ibuffer, len(self._ibuffer))
             command, payload_length = decode_header(b''.join(self._ibuffer))
-            logging.info(
+            logging.debug(
                 'Expecting command {0} with payload length {1}.'.format(command, payload_length))
             self.message = Message(command=command)
             self._ibuffer = []
@@ -107,28 +106,18 @@ class Client(asynchat.async_chat):
             self.handle_message(self.message)
 
     def handle_message(self, message):
-        logging.info('Received message: {0} (length {1}): "{2}"'.format(
+        logging.debug('Received message: {0} (length {1}): "{2}"'.format(
             message.command, message.length, message.payload))
 
     def send_message(self, message):
-        self.push(MAGIC_BYTES)
-        self.push(message.header)
-        if message.payload:
-            self.push(message.payload)
-            self.push(END_PAYLOAD_MAGIC_BYTES)        
+        parts = [
+            MAGIC_BYTES,
+            encode_Int32(message.command),
+            encode_Int32(message.length)]
 
-        # try:
-        #     while True:
-        #         message = input('> ')
-        #         print(message)
-        #         self.push_message(message)
-        #         if message == 'CLOSE':
-        #             logging.info('Stopping client in an orderly manner.')
-        #             break
-        # except KeyboardInterrupt as e:
-        #     logging.info('Forcing client stop.')
-        # except BaseException as e:
-        #     logging.error('Error while running client.')
-        #     logging.debug(e, exc_info=sys.exc_info())
-        # finally:
-        #     self.close()
+        if message.payload:
+            if len(message.payload) > 0:
+                parts.append(message.payload)
+                parts.append(END_PAYLOAD_MAGIC_BYTES)
+
+        self.push(b''.join(parts))
