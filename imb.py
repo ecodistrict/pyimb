@@ -125,7 +125,12 @@ class EventDefinition(object):
         self._client = client
         self._is_subscribed = False
         self._is_published = False
+        self._handlers = set()
 
+    @property
+    def handlers(self):
+        return self._handlers
+    
     @property
     def client(self):
         return self._client
@@ -159,6 +164,10 @@ class EventDefinition(object):
         if self._is_published:
             self.client.signal_unpublish(self.name)
             self._is_published = False
+
+    def handle_event(self, event_kind, event_payload):
+        for handler in self.handlers:
+            handler(event_kind, event_payload)
         
 
 class Command(object):
@@ -204,7 +213,6 @@ class Client(asynchat.async_chat):
             self.set_terminator(END_PAYLOAD_MAGIC_BYTES)
         else:
             raise NotImplementedError()
-            
 
     @property
     def federation(self):
@@ -237,11 +245,6 @@ class Client(asynchat.async_chat):
 
     def collect_incoming_data(self, data):
         self._ibuffer.append(data)
-
-    def _close_socket(self):
-        logging.info('Closing connection to {0}'.format(*self.socket.getpeername()))
-        self.socket.shutdown(socket.SHUT_RDWR)
-        self.close()
 
     def found_terminator(self):
         if self._state is ClientStates.waiting:
@@ -300,7 +303,7 @@ class Client(asynchat.async_chat):
                 self._unique_client_id, self._client_id))
 
         elif command.command_code == icEndSession:
-            self.end_session()
+            self.disconnect()
 
             logging.debug('Handled icEndSession.')
 
@@ -308,28 +311,13 @@ class Client(asynchat.async_chat):
             pass
 
     def _handle_event(self, event_id, event_kind, event_payload):
-        pass
-        # raise NotImplementedError()
-        # event_name = self._event_definitions[event_id]
-        # event_definition = self._event_definitions[event_id] ???
+        event = self._event_definitions[event_id]
+        event.handle_event(event_kind, event_payload)
 
-
-        # if event_kind == ekNormalEvent:
-        #     pass
-        # elif event_kind == ekChangeObjectEvent:
-        #     pass
-        # elif event_kind == ekStreamHeader:
-        #     pass
-        # elif event_kind == ekStreamBody:
-        #     pass
-        # elif event_kind == ekStreamTail:
-        #     pass
-        # else:
-        #     pass
-        
-
-    def end_session(self):
-        self._close_socket()
+    def disconnect(self):
+        logging.info('Closing connection to {0}'.format(*self.socket.getpeername()))
+        self.socket.shutdown(socket.SHUT_RDWR)
+        self.close()
 
     def _signal_command(self, message):
         parts = [
