@@ -189,9 +189,10 @@ class Command(object):
     
 class Client(asynchat.async_chat):
     """docstring for Client"""
-    def __init__(self, *args, **kwargs):
+    def __init__(self, host, port, owner_id=None, owner_name=None, federation=None):
+        
         self._channels_map = {}
-        super(Client, self).__init__(map=self._channels_map, *args, **kwargs)
+        super(Client, self).__init__(map=self._channels_map)
         
         self._ibuffer = []
         self._state = None
@@ -200,6 +201,18 @@ class Client(asynchat.async_chat):
 
         self._event_id_translation = {} # hub's event ID to client's event ID
         self._event_definitions = {} # event id to EventDefinition object
+
+        self._federation = federation
+        logging.info(
+            'Connecting to {0}:{1}. Owner ID: {2}; Owner name: {3}; Federation: {4}.'.format(
+                host, port, owner_id, owner_name, federation))
+        
+        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connect((host, port)) # connect socket
+        t = threading.Thread(target=partial(asyncore.loop, map=self._channels_map))
+        t.start()
+        
+        self._signal_client_info(owner_id, owner_name)
 
 
     def _set_state(self, state):
@@ -226,18 +239,6 @@ class Client(asynchat.async_chat):
     def client_id(self):
         return self._client_id
     
-    def connect(self, host, port, owner_id=None, owner_name=None, federation=None):
-        self._federation = federation
-        logging.info(
-            'Connecting to {0}:{1}. Owner ID: {2}; Owner name: {3}; Federation: {4}.'.format(
-                host, port, owner_id, owner_name, federation))
-        
-        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        super(Client, self).connect((host, port))
-        t = threading.Thread(target=partial(asyncore.loop, map=self._channels_map))
-        t.start()
-        
-        self._signal_client_info(owner_id, owner_name)
 
     def handle_connect(self):
         logging.info('Connected to {0}:{1}'.format(*self.socket.getpeername()))
