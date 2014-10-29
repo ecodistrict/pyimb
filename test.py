@@ -10,7 +10,7 @@ c.subscribe('anything')
 #input()
 c.publish('anything')
 #input()
-#c.signal_change_object(0,1,2, 'something')
+c.signal_change_object(0,1,2, 'something')
 input()
 
 c.unpublish('anything')

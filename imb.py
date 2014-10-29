@@ -116,6 +116,51 @@ def encode_string(value):
         encode_Int32(len(encoded)),
         encoded])
 
+class EventDefinition(object):
+    """docstring for EventDefinition"""
+    def __init__(self, event_id, name, client):
+        super(EventDefinition, self).__init__()
+        self.event_id = event_id
+        self.name = name
+        self._client = client
+        self._is_subscribed = False
+        self._is_published = False
+
+    @property
+    def client(self):
+        return self._client
+
+    @property
+    def subscribers(self):
+        raise NotImplementedError()
+    
+    @property
+    def publishers(self):
+        raise NotImplementedError()
+
+    def subscribe(self):
+        event_entry_type = 0
+        if not self._is_subscribed:
+            self.client.signal_subscribe(self.event_id, event_entry_type, self.name)
+            self._is_subscribed = True
+
+    def unsubscribe(self):
+        if self._is_subscribed:
+            self.client.signal_unsubscribe(self.name)
+            self._is_subscribed = False
+
+    def publish(self):
+        event_entry_type = 0
+        if not self._is_published:
+            self.client.signal_publish(self.event_id, event_entry_type, self.name)
+            self._is_published = True
+
+    def unpublish(self):
+        if self._is_published:
+            self.client.signal_unpublish(self.name)
+            self._is_published = False
+        
+
 class Command(object):
     """docstring for Command"""
     def __init__(self, command_code=None, payload=None):
@@ -132,7 +177,6 @@ class Command(object):
         self._payload = value
         self.length = len(value) if value else 0
                                                                                                               
-
     
 class Client(asynchat.async_chat):
     """docstring for Client"""
@@ -145,9 +189,9 @@ class Client(asynchat.async_chat):
         self._set_state(ClientStates.waiting)
         self._command = None
 
-        self._event_id_translation = {} # hub ID to client ID
-        self._event_names = {}
-        self._next_event_id = 0
+        self._event_id_translation = {} # hub's event ID to client's event ID
+        self._event_definitions = {} # event id to EventDefinition object
+
 
     def _set_state(self, state):
         self._state = state
@@ -264,9 +308,26 @@ class Client(asynchat.async_chat):
             pass
 
     def _handle_event(self, event_id, event_kind, event_payload):
-        raise NotImplementedError()
+        pass
+        # raise NotImplementedError()
+        # event_name = self._event_definitions[event_id]
+        # event_definition = self._event_definitions[event_id] ???
 
+
+        # if event_kind == ekNormalEvent:
+        #     pass
+        # elif event_kind == ekChangeObjectEvent:
+        #     pass
+        # elif event_kind == ekStreamHeader:
+        #     pass
+        # elif event_kind == ekStreamBody:
+        #     pass
+        # elif event_kind == ekStreamTail:
+        #     pass
+        # else:
+        #     pass
         
+
     def end_session(self):
         self._close_socket()
 
@@ -290,7 +351,7 @@ class Client(asynchat.async_chat):
 
         self._signal_command(Command(command_code=icSetClientInfo, payload=payload))
 
-    def _signal_subscribe(self, event_id, event_entry_type, event_name):
+    def signal_subscribe(self, event_id, event_entry_type, event_name):
         payload = b''.join([
             encode_Int32(event_id),
             encode_Int32(event_entry_type),
@@ -298,7 +359,7 @@ class Client(asynchat.async_chat):
 
         self._signal_command(Command(command_code=icSubscribe, payload=payload))
 
-    def _signal_publish(self, event_id, event_entry_type, event_name):
+    def signal_publish(self, event_id, event_entry_type, event_name):
         payload = b''.join([
             encode_Int32(event_id),
             encode_Int32(event_entry_type),
@@ -306,17 +367,17 @@ class Client(asynchat.async_chat):
 
         self._signal_command(Command(command_code=icPublish, payload=payload))
 
-    def _signal_unsubscribe(self, event_name):
+    def signal_unsubscribe(self, event_name):
         payload = encode_string(event_name)
 
         self._signal_command(Command(command_code=icUnsubscribe, payload=payload))
 
-    def _signal_unpublish(self, event_name):
+    def signal_unpublish(self, event_name):
         payload = encode_string(event_name)
 
         self._signal_command(Command(command_code=icUnpublish, payload=payload))
 
-    def _signal_normal_event(self, event_id, event_kind, event_payload):
+    def signal_normal_event(self, event_id, event_kind, event_payload):
         payload = b''.join([
             encode_Int32(event_id),
             encode_Int32(0),
@@ -325,67 +386,76 @@ class Client(asynchat.async_chat):
 
         self._signal_command(Command(command_code=icEvent, payload=payload))
 
-    def _signal_change_object(self, event_id, action, object_id, attribute):
+    def signal_change_object(self, event_id, action, object_id, attribute):
         event_payload = b''.join([
             encode_Int32(action),
             encode_Int32(object_id),
             encode_string(attribute)])
 
-        self._signal_normal_event(event_id, ekChangeObjectEvent, event_payload)
+        self.signal_normal_event(event_id, ekChangeObjectEvent, event_payload)
 
     def subscribe(self, event_name, prefix=True):
         if prefix:
             event_name = self.federation + '.' + event_name
 
-        event_id = self._add_or_set_event(event_name)
+        event = self._find_or_create_event(event_name)
 
-        event_entry_type = 0
-        self._signal_subscribe(event_id, event_entry_type, event_name)
+        event.subscribe()
+
+        return event
 
     def unsubscribe(self, event_name, prefix=True):
         if prefix:
             event_name = self.federation + '.' + event_name
 
-        # event_id = self._try_get_event_id(event_name)
+        event = self._try_get_event(event_name)
+        if event:
+            event.unsubscribe()
 
-        self._signal_unsubscribe(event_name)
+        return event
+
 
     def publish(self, event_name, prefix=True):
         if prefix:
             event_name = self.federation + '.' + event_name
 
-        event_id = self._add_or_set_event(event_name)
+        event = self._find_or_create_event(event_name)
 
-        event_entry_type = 0
-        self._signal_publish(event_id, event_entry_type, event_name)
+        event.publish()
+
+        return event
 
     def unpublish(self, event_name, prefix=True):
         if prefix:
             event_name = self.federation + '.' + event_name
 
-        # event_id = self._try_get_event_id(event_name)
+        event = self._try_get_event(event_name)
+        if event:
+            event.unpublish()
 
-        self._signal_unpublish(event_name)
+        return event
 
-    def _try_get_event_id(self, event_name):
-        event_id = None
-        for key in self._event_names:
-            if self._event_names[key] == event_name:
-                event_id = key
-                break
+    def _try_get_event(self, event_name):
+        for key, event in self._event_definitions.items():
+            if event.name == event_name:
+                return event
 
-        return event_id
+        return None
 
-    def _add_or_set_event(self, event_name):
-        event_id = self._try_get_event_id(event_name)
+    def _make_new_event_id(self):
+        event_id = 0
+        while True:
+            if not event_id in self._event_definitions:
+                return event_id
+            else:
+                event_id += 1
 
-        if not event_id:
-            event_id = 0
-            while True:
-                if not event_id in self._event_names:
-                    return event_id
-                else:
-                    event_id += 1
-            self._event_names[self._generate_event_id()] = event_name
 
-        return event_id
+    def _find_or_create_event(self, event_name):
+        event = self._try_get_event(event_name)
+        if not event:
+            event_id = self._make_new_event_id()
+            event = EventDefinition(event_id, event_name, self)
+            self._event_definitions[event_id] = event
+        
+        return event
