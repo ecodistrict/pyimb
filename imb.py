@@ -87,12 +87,6 @@ logging.basicConfig(format='[%(levelname)8s] %(message)s', level=logging.DEBUG)
 TEST_URL = 'imb.lohman-solutions.com'
 TEST_PORT = 4000
 
-class ClientStates(Enum):
-    """docstring for ClientStates"""
-    waiting = 0
-    header = 1
-    payload = 2
-
 def encode_int32(value):
     """Encode a signed 32-bit integer, using the default byte order.
 
@@ -373,7 +367,14 @@ class Command(object):
     def payload(self, value):
         self._payload = value
         self.length = len(value) if value else 0
-                                                                                                              
+
+
+class ClientStates(Enum):
+    """docstring for ClientStates"""
+    waiting = 0
+    header = 1
+    payload = 2
+
     
 class Client(asynchat.async_chat):
     """docstring for Client"""
@@ -381,9 +382,10 @@ class Client(asynchat.async_chat):
         
         self._channels_map = {}
         super(Client, self).__init__(map=self._channels_map)
-        
+
+        self.debug = True
+
         self._ibuffer = []
-        self._state = None
         self._set_state(ClientStates.waiting)
         self._command = None
 
@@ -414,8 +416,6 @@ class Client(asynchat.async_chat):
             self.set_terminator(HEADER_LENGTH)
         elif state is ClientStates.payload:
             self.set_terminator(END_PAYLOAD_MAGIC_BYTES)
-        else:
-            raise NotImplementedError()
 
     @property
     def federation(self):
