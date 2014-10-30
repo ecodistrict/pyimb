@@ -14,6 +14,7 @@ END_PAYLOAD_MAGIC_BYTES = int.to_bytes(0x10F13467, 4, BYTEORDER)
 HEADER_LENGTH = 8 # bytes
 DEFAULT_ENCODING = 'utf-8'
 DEFAULT_STREAM_BODY_BUFFER_SIZE = 16 * 1024
+SOCK_SELECT_TIMEOUT = 1 # seconds
 
 icHeartBeat = -4;
 icEndSession = -5;
@@ -401,11 +402,11 @@ class Client(asynchat.async_chat):
         
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connect((host, port)) # connect socket
-        t = threading.Thread(target=partial(asyncore.loop, map=self._channels_map))
+        t = threading.Thread(
+            target=partial(asyncore.loop, map=self._channels_map, timeout=SOCK_SELECT_TIMEOUT))
         t.start()
         
         self._signal_client_info(owner_id, owner_name)
-
 
     def _set_state(self, state):
         self._state = state
