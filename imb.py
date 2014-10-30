@@ -96,27 +96,99 @@ class ClientStates(Enum):
     payload = 2
 
 def encode_int32(value):
+    """Encode a signed 32-bit integer, using the default byte order.
+
+    Args:
+        value (int): The integer to encode.
+
+    Returns:
+        bytes: A `bytes` object representing the integer.
+    """
     return value.to_bytes(4, BYTEORDER, signed=True)
 
-def decode_int32(value):
-    return int.from_bytes(value, BYTEORDER, signed=True)
+def decode_int(buf):
+    """Decode a signed integer from bytes, using the default byte order.
+
+    Args:
+        buf (bytes or similar): The bytes to decode.
+
+    Returns:
+        int: The decoded integer.
+    """
+    return int.from_bytes(buf, BYTEORDER, signed=True)
 
 def encode_uint32(value):
+    """Encode an unsigned 32-bit integer in bytes using the default byte order.
+
+    Args:
+        value (int): The integer to encode.
+
+    Returns:
+        bytes: A `bytes` object representing the integer.
+    """
     return value.to_bytes(4, BYTEORDER, signed=False)
 
-def decode_uint32(value):
-    return int.from_bytes(value, BYTEORDER, signed=False)
+def decode_uint(buf):
+    """Decode an unsigned integer from bytes, using the default byte order.
+
+    Args:
+        buf (bytes or similar): The bytes to decode.
+
+    Returns:
+        int: The decoded integer.
+    """
+    return int.from_bytes(buf, BYTEORDER, signed=False)
 
 def encode_string(value):
+    """Encode a string (prefixed with string length).
+
+    Strings are encoded as follows. First comes a signed 32-bit integer equal 
+    to the number of bytes in the encoded string. Then comes the string, encoded
+    with the default encoding.
+
+    Args:
+        value (str): The string to encode.
+
+    Returns:
+        bytes: A `bytes` object representing the integer.
+    """
     encoded = value.encode(DEFAULT_ENCODING)
     return b''.join([
         encode_int32(len(encoded)),
         encoded])
 
-def decode_string(buf, start, return_endpos=False):
-    length = decode_int32(buf[start:(start+4)])
+def decode_string(buf, start=0, nextpos=False):
+    """Decode a string prefixed with length.
+
+    This function is the reverse of :func:`encode_string`.
+
+    Args:
+        buf (bytes or similar): The bytes to decode.
+        start (int, optional): The index to start decoding from in the bytes.
+        nextpos (bool, optional): If `True`, the function will return a 
+            tuple `(decoded_string, nextpos)`, where `nextpos` is equal to 
+            one plus the index of the last byte of the string. (See example below.)
+
+    Examples:
+        >>> encode_string('foo')
+        b'\x03\x00\x00\x00foo'
+
+        >>> decode_string(encode_string('bar'))
+        'bar'
+
+        >>> buf = b''.join([encode_string('foo'), encode_string('bar')])
+        >>> s1, nextpos = decode_string(buf, nextpos=True)
+        >>> s1
+        'foo'
+        >>> nextpos
+        7
+        >>> s2 = decode_string(buf, start=nextpos)
+        >>> s2
+        'bar'
+    """
+    length = decode_int(buf[start:(start+4)])
     string = buf[(start+4):(start+4+length)].decode(DEFAULT_ENCODING)
-    if return_endpos:
+    if nextpos:
         return string, start+length+4
     else:
         return string
@@ -199,20 +271,20 @@ class EventDefinition(object):
             return (payload,)
 
         elif event_kind == ekChangeObjectEvent:
-            action = decode_int32(payload[0:4])
-            object_id = decode_int32(payload[4:8])
+            action = decode_int(payload[0:4])
+            object_id = decode_int(payload[4:8])
             short_event_name = self.name
             attr_name = decode_string(payload, 8)
             return (action, object_id, short_event_name, attr_name)
 
         elif event_kind == ekStreamHeader:
-            stream_id = decode_int32(payload[0:4])
+            stream_id = decode_int(payload[0:4])
             stream_name = decode_string(payload, 4)
             logging.debug('Decoding: stream id: {0}; stream name: {1}'.format(stream_id, stream_name))
             return (stream_id, stream_name)
 
         elif event_kind in (ekStreamBody, ekStreamTail):
-            stream_id = decode_int32(payload[0:4])
+            stream_id = decode_int(payload[0:4])
             data = payload[4:]
             return (stream_id, data)
 
@@ -374,8 +446,8 @@ class Client(asynchat.async_chat):
 
         # Received header
         elif self._state is ClientStates.header:
-            command_code = decode_int32(self._ibuffer[0:4])
-            payload_length = decode_int32(self._ibuffer[4:])
+            command_code = decode_int(self._ibuffer[0:4])
+            payload_length = decode_int(self._ibuffer[4:])
             self._command = Command(command_code=command_code)
             self._ibuffer = []
             if payload_length == 0:
@@ -394,10 +466,10 @@ class Client(asynchat.async_chat):
     def _handle_command(self, command):
 
         if command.command_code == icEvent:
-            hub_event_id = decode_int32(command.payload[0:4])
+            hub_event_id = decode_int(command.payload[0:4])
             client_event_id = self._event_id_translation[hub_event_id]
             # Here, we could get the tick (payload[4:8]), but we don't
-            event_kind = decode_uint32(command.payload[8:12])
+            event_kind = decode_uint(command.payload[8:12])
             event_payload = command.payload[12:]
             logging.debug((
                 'Received icEvent. Hub id: {0}; Client id: {1}; '
@@ -408,8 +480,8 @@ class Client(asynchat.async_chat):
 
 
         elif command.command_code == icSetEventIDTranslation:
-            hub_event_id = decode_int32(command.payload[0:4])
-            client_event_id = decode_int32(command.payload[4:8])
+            hub_event_id = decode_int(command.payload[0:4])
+            client_event_id = decode_int(command.payload[4:8])
             if client_event_id >= 0:
                 self._event_id_translation[hub_event_id] = client_event_id
             else:
@@ -420,8 +492,8 @@ class Client(asynchat.async_chat):
 
         elif command.command_code == icUniqueClientID:
 
-            self._unique_client_id = decode_uint32(command.payload[0:4])
-            self._client_id = decode_uint32(command.payload[4:8])
+            self._unique_client_id = decode_uint(command.payload[0:4])
+            self._client_id = decode_uint(command.payload[4:8])
 
             logging.debug('Handled icUniqueClientID. Unique client id: {0}; Client id: {1}'.format(
                 self._unique_client_id, self._client_id))
