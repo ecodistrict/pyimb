@@ -446,8 +446,9 @@ class Client(asynchat.async_chat):
 
         # Received header
         elif self._state is ClientStates.header:
-            command_code = decode_int(self._ibuffer[0:4])
-            payload_length = decode_int(self._ibuffer[4:])
+            header = b''.join(self._ibuffer)
+            command_code = decode_int(header[0:4])
+            payload_length = decode_int(header[4:])
             self._command = Command(command_code=command_code)
             self._ibuffer = []
             if payload_length == 0:
