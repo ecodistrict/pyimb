@@ -590,55 +590,7 @@ class Client(asynchat.async_chat):
             encode_int32(event_kind),
             event_payload])
 
-        self._signal_command(Command(command_code=icEvent, payload=payload))    
-
-    def subscribe(self, event_name, prefix=True):
-        if prefix:
-            event_name = self.federation + '.' + event_name
-
-        event = self._find_or_create_event(event_name)
-
-        event.subscribe()
-
-        return event
-
-    def unsubscribe(self, event_name, prefix=True):
-        if prefix:
-            event_name = self.federation + '.' + event_name
-
-        event = self._try_get_event(event_name)
-        if event:
-            event.unsubscribe()
-
-        return event
-
-
-    def publish(self, event_name, prefix=True):
-        if prefix:
-            event_name = self.federation + '.' + event_name
-
-        event = self._find_or_create_event(event_name)
-
-        event.publish()
-
-        return event
-
-    def unpublish(self, event_name, prefix=True):
-        if prefix:
-            event_name = self.federation + '.' + event_name
-
-        event = self._try_get_event(event_name)
-        if event:
-            event.unpublish()
-
-        return event
-
-    def _try_get_event(self, event_name):
-        for key, event in self._event_definitions.items():
-            if event.name == event_name:
-                return event
-
-        return None
+        self._signal_command(Command(command_code=icEvent, payload=payload))
 
     def _make_new_event_id(self):
         event_id = 0
@@ -648,12 +600,43 @@ class Client(asynchat.async_chat):
             else:
                 event_id += 1
 
+    def get_event(self, event_name, prefix=True, create=True):
+        if prefix:
+            event_name = self.federation + '.' + event_name
 
-    def _find_or_create_event(self, event_name):
-        event = self._try_get_event(event_name)
-        if not event:
+        # Look for the event among the existing ones
+        for key, event in self._event_definitions.items():
+            if event.name == event_name:
+                return event
+
+        # If we have come this far, the event has not been created yet
+        if create:
             event_id = self._make_new_event_id()
             event = EventDefinition(event_id, event_name, self)
             self._event_definitions[event_id] = event
+            return event
+        else:
+            return None
         
+
+    def subscribe(self, event_name, prefix=True):
+        event = self.get_event(event_name, prefix=prefix)
+        event.subscribe()
+        return event
+
+    def unsubscribe(self, event_name, prefix=True):
+        event = self.get_event(event_name, prefix=prefix, create=False)
+        if event:
+            event.unsubscribe()
+        return event
+
+    def publish(self, event_name, prefix=True):
+        event = self.get_event(event_name, prefix=prefix)
+        event.publish()
+        return event
+
+    def unpublish(self, event_name, prefix=True):
+        event = self.get_event(event_name, prefix=prefix, create=False)
+        if event:
+            event.unpublish()
         return event
