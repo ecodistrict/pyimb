@@ -410,7 +410,7 @@ class Client(asynchat.async_chat):
 
     def _set_state(self, state):
         self._state = state
-        
+
         if state is ClientStates.waiting:
             self.set_terminator(MAGIC_BYTES)
         elif state is ClientStates.header:
@@ -430,7 +430,7 @@ class Client(asynchat.async_chat):
             # wait for a max of 10*0.5 seconds = 5 seconds
             spincount = 10
             while (not self._unique_client_id) & (spincount>0):
-                time.sleep(0.5)    
+                time.sleep(0.5)
                 spincount -= 1
             if not self._unique_client_id:
                 self._unique_client_id = -1 # mark as -1 to signal we could not get it from the hub and wont retry
@@ -523,7 +523,11 @@ class Client(asynchat.async_chat):
         event.handle_event(event_kind, event_payload)
 
     def disconnect(self):
-        logging.info('Closing connection to {0}'.format(*self.socket.getpeername()))
+        while self.writable():
+            logging.debug('There is still data left to write. '
+                'Waiting a little before disconnecting...')
+            time.sleep(1) # 1 second
+        logging.info('Closing connection to {0}:{1}.'.format(*self.socket.getpeername()))
         self.socket.shutdown(socket.SHUT_RDWR)
         self.close()
 
