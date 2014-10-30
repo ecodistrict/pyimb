@@ -391,6 +391,8 @@ class Client(asynchat.async_chat):
         self._event_definitions = {} # event id to EventDefinition object
 
         self._federation = federation
+        self._unique_client_id = None
+        
         logging.info(
             'Connecting to {0}:{1}. Owner ID: {2}; Owner name: {3}; Federation: {4}.'.format(
                 host, port, owner_id, owner_name, federation))
@@ -421,6 +423,16 @@ class Client(asynchat.async_chat):
 
     @property
     def unique_client_id(self):
+        if not self._unique_client_id:
+            # send explicit request for the unique client id (backwards compatible with older hubs)
+            self._signal_request_unique_client_id()
+            # wait for a max of 10*0.5 seconds = 5 seconds
+            spincount = 10
+            while (not self._unique_client_id) & (spincount>0):
+                time.sleep(0.5)    
+                spincount -= 1
+            if not self._unique_client_id:
+                self._unique_client_id = -1 # mark as -1 to signal we could not get it from the hub and wont retry
         return self._unique_client_id
     
     @property
@@ -534,6 +546,12 @@ class Client(asynchat.async_chat):
 
         self._signal_command(Command(command_code=icSetClientInfo, payload=payload))
 
+    def _signal_request_unique_client_id(self):
+        payload = b''.join([
+            encode_int32(0),
+            encode_int32(0)])
+        self._signal_command(Command(command_code=icUniqueClientID, payload=payload))
+    
     def signal_subscribe(self, event_id, event_entry_type, event_name):
         payload = b''.join([
             encode_int32(event_id),
