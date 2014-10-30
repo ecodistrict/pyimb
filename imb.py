@@ -116,6 +116,10 @@ def encode_string(value):
         encode_int32(len(encoded)),
         encoded])
 
+def decode_string(buf, start):
+    length = decode_int32(buf[start:(start+4)])
+    return buf[(start+4):(start+4+length)].decode(DEFAULT_ENCODING), start+length+4
+
 class EventDefinition(object):
     """docstring for EventDefinition"""
     def __init__(self, event_id, name, client):
@@ -125,12 +129,20 @@ class EventDefinition(object):
         self._client = client
         self._is_subscribed = False
         self._is_published = False
-        self._handlers = set()
+        self._handlers = {}
 
-    @property
-    def handlers(self):
-        return self._handlers
-    
+    def add_handler(self, event_kind, handler):
+        if not event_kind in self._handlers:
+            self._handlers[event_kind] = set()
+        self._handlers[event_kind].add(handler)
+
+    def remove_handler(self, handler):
+        for event_kind in self._handlers:
+            try:
+                self._handlers[event_kind].remove(handler)
+            except KeyError:
+                pass
+
     @property
     def client(self):
         return self._client
@@ -166,8 +178,23 @@ class EventDefinition(object):
             self._is_published = False
 
     def handle_event(self, event_kind, event_payload):
-        for handler in self.handlers:
-            handler(event_kind, event_payload)
+        for handler in self._handlers[event_kind]:
+            args = self._decode_event_payload(event_kind, event_payload)
+            handler(*args)
+
+    def _decode_event_payload(self, event_kind, payload):
+        if event_kind == ekNormalEvent:
+            return (payload,)
+
+        elif event_kind == ekChangeObjectEvent:
+            action = decode_int32(payload[0:4])
+            object_id = decode_int32(payload[4:8])
+            short_event_name = self.name
+            attr_name, pos = decode_string(payload, 8)
+            return (action, object_id, short_event_name, attr_name)
+
+        else:
+            raise NotImplementedError()
 
     def signal_event(self, event_kind, event_payload):
         if not self._is_published:

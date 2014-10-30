@@ -11,6 +11,9 @@ anything = c.subscribe('anything')
 anything.publish()
 #input()
 
+anything.add_handler(imb.ekChangeObjectEvent, 
+    lambda action, object_id, short_event_name, attr_name: print('ChangeObjectEvent', action, object_id, short_event_name, attr_name))
+
 input()
 anything.signal_change_object(1,2, 'something')
 input()
