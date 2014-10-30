@@ -15,6 +15,7 @@ CMD_LENGTH = 4 # bytes
 PAYLOAD_SIZE_LENGTH = 4 # bytes
 HEADER_LENGTH = CMD_LENGTH + PAYLOAD_SIZE_LENGTH
 DEFAULT_ENCODING = 'utf-8'
+DEFAULT_STREAM_BODY_BUFFER_SIZE = 16 * 1024
 
 icHeartBeat = -4;
 icEndSession = -5;
@@ -116,9 +117,13 @@ def encode_string(value):
         encode_int32(len(encoded)),
         encoded])
 
-def decode_string(buf, start):
+def decode_string(buf, start, return_endpos=False):
     length = decode_int32(buf[start:(start+4)])
-    return buf[(start+4):(start+4+length)].decode(DEFAULT_ENCODING), start+length+4
+    string = buf[(start+4):(start+4+length)].decode(DEFAULT_ENCODING)
+    if return_endpos:
+        return string, start+length+4
+    else:
+        return string
 
 class EventDefinition(object):
     """docstring for EventDefinition"""
@@ -130,8 +135,19 @@ class EventDefinition(object):
         self._is_subscribed = False
         self._is_published = False
         self._handlers = {}
+        self._streams = {}
+        self.create_stream_callback = None
+        self.end_stream_callback = None
+
+        self._handlers[ekStreamHeader] = (self._handle_stream_header,)
+        self._handlers[ekStreamBody] = (self._handle_stream_body,)
+        self._handlers[ekStreamTail] = (self._handle_stream_tail,)
+
 
     def add_handler(self, event_kind, handler):
+        if event_kind in (ekStreamHeader, ekStreamBody, ekStreamTail):
+            raise RuntimeError("Don't do that. We'll handle it for you!")
+
         if not event_kind in self._handlers:
             self._handlers[event_kind] = set()
         self._handlers[event_kind].add(handler)
@@ -190,8 +206,19 @@ class EventDefinition(object):
             action = decode_int32(payload[0:4])
             object_id = decode_int32(payload[4:8])
             short_event_name = self.name
-            attr_name, pos = decode_string(payload, 8)
+            attr_name = decode_string(payload, 8)
             return (action, object_id, short_event_name, attr_name)
+
+        elif event_kind == ekStreamHeader:
+            stream_id = decode_int32(payload[0:4])
+            stream_name = decode_string(payload, 4)
+            logging.debug('Decoding: stream id: {0}; stream name: {1}'.format(stream_id, stream_name))
+            return (stream_id, stream_name)
+
+        elif event_kind in (ekStreamBody, ekStreamTail):
+            stream_id = decode_int32(payload[0:4])
+            data = payload[4:]
+            return (stream_id, data)
 
         else:
             raise NotImplementedError()
@@ -214,9 +241,56 @@ class EventDefinition(object):
         payload = encode_string(value)
         self.signal_event(event_kind, payload)
 
-    def signal_stream(self):
-        raise NotImplementedError()
-        
+    def hash_stream(self, name):
+        hash64 = hash(name + repr(self.client.socket.getsockname()))
+        upper = (hash64 >> 32) & 0x7FFFFFFF
+        lower = hash64 & 0x7FFFFFFF
+
+        stream_id = upper ^ lower
+        return stream_id
+
+
+    def signal_stream(self, name, stream, chunk_size=DEFAULT_STREAM_BODY_BUFFER_SIZE):
+        stream_id = self.hash_stream(name)
+        logging.debug('Signalling stream with stream id {0}'.format(stream_id))
+
+        # header
+        parts = [
+            encode_int32(stream_id),
+            encode_string(name)]
+        self.signal_event(ekStreamHeader, b''.join(parts))
+
+        # body or tail
+        while True:
+            chunk = stream.read(chunk_size)
+            payload = b''.join((encode_int32(stream_id), chunk))
+
+            if len(chunk) == chunk_size:
+                self.signal_event(ekStreamBody, payload)
+            else:
+                self.signal_event(ekStreamTail, payload)
+                break
+
+    def _handle_stream_header(self, stream_id, stream_name):
+        logging.debug('Handling stream HEAD.')
+        if self.create_stream_callback:
+            stream = self.create_stream_callback(stream_id, stream_name)
+            if stream:
+                self._streams[stream_id] = stream
+
+    def _handle_stream_body(self, stream_id, data):
+        logging.debug('Handling stream BODY chunk.')
+        self._streams[stream_id].write(data)
+
+    def _handle_stream_tail(self, stream_id, data):
+        logging.debug('Handling stream TAIL chunk.')
+        stream = self._streams[stream_id]
+        stream.write(data)
+        if self.end_stream_callback:
+            self.end_stream_callback(self, stream)
+        stream.close()
+        del self._streams[stream_id]
+
 
 class Command(object):
     """docstring for Command"""
