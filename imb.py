@@ -1,3 +1,28 @@
+# -*- coding: utf-8 -*-
+
+"""Client for TNO's IMB framework.
+
+Example::
+    import imb
+    host = 'localhost'
+    port = 4000
+    owner_id = 123
+    owner_name = 'my name'
+    federation = 'my federation'
+
+    c = imb.Client(host, port, owner_id, owner_name, federation)
+    e = c.publish('my event') # Now we can send signals on the event
+    e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream on the event
+    e.unpublish()
+    c.disconnect()
+
+Example::
+    c = imb.Client(host, port, owner_id, owner_name, federation)
+    e = c.publish('my event') # Now we can send signals on the event
+    e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream on the event
+    e.unpublish()
+    c.disconnect()
+"""
 import sys
 import threading
 import time
@@ -187,9 +212,38 @@ def decode_string(buf, start=0, nextpos=False):
         return string
 
 class EventDefinition(object):
-    """docstring for EventDefinition"""
+    """Represents an event in the IMB framework
+
+    The :class:`EventDefinition` object represents an event (a named 
+    communication channel) in the IMB framework. It is created by a
+    :class:`Client` instance and can then be used to
+
+    *   subscribe/unsubscribe to the event,
+    *   publish/unpublish to the event,
+    *   send signals, and
+    *   setup handlers for incoming signals.
+
+    Note:
+        You should not create EventDefinition instances yourself. 
+        Instead, call :func:`Client.get_event`, :func:`Client.subscribe` or 
+        :func:`Client.publish`.
+
+    """
+
     def __init__(self, event_id, name, client):
+        """Constructor for `EventDefinition`.
+
+        You should not create EventDefinition instances yourself. 
+        Instead, call :func:`Client.get_event`, :func:`Client.subscribe` or 
+        :func:`Client.publish`.
+
+        Args:
+            event_id (int): The Client's id for the event.
+            name (str): The name used to identify the event.
+            client (imb.Client): The Client instance to be used.
+        """
         super(EventDefinition, self).__init__()
+
         self.event_id = event_id
         self.name = name
         self._client = client
