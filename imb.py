@@ -95,10 +95,6 @@ class ClientStates(Enum):
     header = 1
     payload = 2
 
-        
-def decode_header(header):
-    return (decode_int32(header[0:4]), decode_int32(header[4:]))
-
 def encode_int32(value):
     return value.to_bytes(4, BYTEORDER, signed=True)
 
@@ -370,12 +366,16 @@ class Client(asynchat.async_chat):
         self._ibuffer.append(data)
 
     def found_terminator(self):
+
+        # Start of command
         if self._state is ClientStates.waiting:
             self._ibuffer = []
             self._set_state(ClientStates.header)
 
+        # Received header
         elif self._state is ClientStates.header:
-            command_code, payload_length = decode_header(b''.join(self._ibuffer))
+            command_code = decode_int32(self._ibuffer[0:4])
+            payload_length = decode_int32(self._ibuffer[4:])
             self._command = Command(command_code=command_code)
             self._ibuffer = []
             if payload_length == 0:
@@ -384,6 +384,7 @@ class Client(asynchat.async_chat):
             else:
                 self._set_state(ClientStates.payload)
 
+        # Received payload
         elif self._state is ClientStates.payload:
             self._set_state(ClientStates.waiting)
             self._command.payload = b''.join(self._ibuffer)
