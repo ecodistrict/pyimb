@@ -221,7 +221,6 @@ class EventDefinition(object):
         You should not create EventDefinition instances yourself. 
         Instead, call :func:`Client.get_event`, :func:`Client.subscribe` or 
         :func:`Client.publish`.
-
     """
 
     def __init__(self, event_id, name, client):
