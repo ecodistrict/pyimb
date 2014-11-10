@@ -1,27 +1,23 @@
 # -*- coding: utf-8 -*-
 
-"""Client for TNO's IMB framework.
+"""
+Example:
+---------
+    Sending a stream::
 
-Example::
-    import imb
-    host = 'localhost'
-    port = 4000
-    owner_id = 123
-    owner_name = 'my name'
-    federation = 'my federation'
+        import imb
+        host = 'localhost'
+        port = 4000
+        owner_id = 123
+        owner_name = 'my name'
+        federation = 'my federation'
 
-    c = imb.Client(host, port, owner_id, owner_name, federation)
-    e = c.publish('my event') # Now we can send signals on the event
-    e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream on the event
-    e.unpublish()
-    c.disconnect()
+        c = imb.Client(host, port, owner_id, owner_name, federation)
+        e = c.publish('my event') # Now we can send signals on the event
+        e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream on the event
+        e.unpublish()
+        c.disconnect()
 
-Example::
-    c = imb.Client(host, port, owner_id, owner_name, federation)
-    e = c.publish('my event') # Now we can send signals on the event
-    e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream on the event
-    e.unpublish()
-    c.disconnect()
 """
 import sys
 import threading
@@ -260,6 +256,38 @@ class EventDefinition(object):
 
 
     def add_handler(self, event_kind, handler):
+        """Add a handler for received events of a certain kind.
+
+        The handler is a callable object which is called after an event
+        has arrived. Your handler is expected to have the right arguments
+        signature for the event kind. Check examples below, or the source of
+        :func:`_decode_event_payload` if you are unsure.
+
+        Args:
+            event_kind (int): One of the event kind constants, e.g. `ekNormalEvent`
+                or `ekChangeObjectEvent`.
+            handler (callable): The handler.
+
+        Raises:
+            RuntimeError: If you try to add handlers for stream events.
+
+        Example:
+            ::
+            
+                c = imb.Client(url, port, owner_id, owner_name, federation)
+                e = c.subscribe('event name')
+
+                def my_change_object_handler(action, object_id, short_event_name, attr_name):
+                    print('ChangeObjectEvent:', action, object_id, short_event_name, attr_name)
+
+                e.add_handler(imb.ekChangeObjectEvent, my_change_object_handler)
+
+                def my_normal_event_handler(payload):
+                    print('NormalEvent:', payload)
+
+                e.add_handler(imb.ekNormalEvent, my_normal_event_handler)
+        """
+
         if event_kind in (ekStreamHeader, ekStreamBody, ekStreamTail):
             raise RuntimeError("Don't do that. We'll handle it for you!")
 
