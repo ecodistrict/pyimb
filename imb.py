@@ -2,21 +2,19 @@
 
 """
 Example:
----------
-    Sending a stream::
 
-        import imb
-        host = 'localhost'
-        port = 4000
-        owner_id = 123
-        owner_name = 'my name'
-        federation = 'my federation'
-
-        c = imb.Client(host, port, owner_id, owner_name, federation)
-        e = c.publish('my event') # Now we can send signals on the event
-        e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream on the event
-        e.unpublish()
-        c.disconnect()
+    >>> import imb
+    >>> host = 'localhost'
+    >>> port = 4000
+    >>> owner_id = 123
+    >>> owner_name = 'my name'
+    >>> federation = 'my federation'
+    >>> 
+    >>> c = imb.Client(host, port, owner_id, owner_name, federation) # Connect to a hub
+    >>> e = c.publish('my event') # Now we can send signals on the event 
+    >>> e.signal_stream('stream name', open('test.txt', 'rb')) # Empty a file stream on the event
+    >>> e.unpublish()
+    >>> c.disconnect()
 
 """
 import sys
@@ -272,20 +270,14 @@ class EventDefinition(object):
             RuntimeError: If you try to add handlers for stream events.
 
         Example:
-            ::
-            
-                c = imb.Client(url, port, owner_id, owner_name, federation)
-                e = c.subscribe('event name')
-
-                def my_change_object_handler(action, object_id, short_event_name, attr_name):
-                    print('ChangeObjectEvent:', action, object_id, short_event_name, attr_name)
-
-                e.add_handler(imb.ekChangeObjectEvent, my_change_object_handler)
-
-                def my_normal_event_handler(payload):
-                    print('NormalEvent:', payload)
-
-                e.add_handler(imb.ekNormalEvent, my_normal_event_handler)
+            >>> c = imb.Client(url, port, owner_id, owner_name, federation)
+            >>> e = c.subscribe('event name')
+            >>> def my_change_object_handler(action, object_id, short_event_name, attr_name):
+            ...     print('ChangeObjectEvent:', action, object_id, short_event_name, attr_name)
+            >>> e.add_handler(imb.ekChangeObjectEvent, my_change_object_handler)
+            >>> def my_normal_event_handler(payload):
+            ...     print('NormalEvent:', payload)
+            >>> e.add_handler(imb.ekNormalEvent, my_normal_event_handler)
         """
 
         if event_kind in (ekStreamHeader, ekStreamBody, ekStreamTail):
