@@ -459,18 +459,18 @@ class EventDefinition(object):
                 break
 
     def _handle_stream_header(self, stream_id, stream_name):
-        logging.debug('Handling stream HEAD.')
+        # logging.debug('Handling stream HEAD.')
         if self.create_stream_callback:
             stream = self.create_stream_callback(stream_id, stream_name)
             if stream:
                 self._streams[stream_id] = stream
 
     def _handle_stream_body(self, stream_id, data):
-        logging.debug('Handling stream BODY chunk.')
+        # logging.debug('Handling stream BODY chunk.')
         self._streams[stream_id].write(data)
 
     def _handle_stream_tail(self, stream_id, data):
-        logging.debug('Handling stream TAIL chunk.')
+        # logging.debug('Handling stream TAIL chunk.')
         stream = self._streams[stream_id]
         stream.write(data)
         if self.end_stream_callback:
@@ -647,10 +647,10 @@ class Client(asynchat.async_chat):
             # Here, we could get the tick (payload[4:8]), but we don't
             event_kind = decode_uint(command.payload[8:12])
             event_payload = command.payload[12:]
-            logging.debug((
-                'Received icEvent. Hub id: {0}; Client id: {1}; '
-                'Event kind: {2}; Payload length: {3}').format(
-                    hub_event_id, client_event_id, event_kind, len(event_payload)))
+            # logging.debug((
+            #     'Received icEvent. Hub id: {0}; Client id: {1}; '
+            #     'Event kind: {2}; Payload length: {3}').format(
+            #         hub_event_id, client_event_id, event_kind, len(event_payload)))
 
             self._handle_event(client_event_id, event_kind, event_payload)
 
@@ -663,21 +663,21 @@ class Client(asynchat.async_chat):
             else:
                 del self._event_id_translation[hub_event_id]
 
-            logging.debug("Handled icSetEventIDTranslation. Hub's event id: {0}; Client's event id: {1}.".format(
-                hub_event_id, client_event_id))
+            # logging.debug("Handled icSetEventIDTranslation. Hub's event id: {0}; Client's event id: {1}.".format(
+            #     hub_event_id, client_event_id))
 
         elif command.command_code == icUniqueClientID:
 
             self._unique_client_id = decode_uint(command.payload[0:4])
             self._client_id = decode_uint(command.payload[4:8])
 
-            logging.debug('Handled icUniqueClientID. Unique client id: {0}; Client id: {1}'.format(
-                self._unique_client_id, self._client_id))
+            # logging.debug('Handled icUniqueClientID. Unique client id: {0}; Client id: {1}'.format(
+            #     self._unique_client_id, self._client_id))
 
         elif command.command_code == icEndSession:
             self.disconnect()
 
-            logging.debug('Handled icEndSession.')
+            # logging.debug('Handled icEndSession.')
 
         else:
             pass
