@@ -104,9 +104,6 @@ ekTimerStatusRequest = 50;
 logging.basicConfig(format='[%(levelname)8s] %(message)s', level=logging.DEBUG)
 
 
-TEST_URL = 'imb.lohman-solutions.com'
-TEST_PORT = 4000
-
 def encode_int32(value):
     """Encode a signed 32-bit integer, using the default byte order.
 
