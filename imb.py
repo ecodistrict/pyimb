@@ -900,7 +900,7 @@ class Client(asynchat.async_chat):
         return event
 
     def unpublish(self, event_name, prefix=True):
-        """Ensure that the client is publishing an event.
+        """Ensure that the client is not publishing an event.
 
         Args:
             event_name (str): See docs for :func:`Client.get_event`.
