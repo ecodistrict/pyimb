@@ -576,7 +576,14 @@ class ClientStates(Enum):
 class Client(asynchat.async_chat):
     """A client that can connect to an IMB hub.
 
-    Example:
+    The client tries to open a socket immediately as the object is created.
+    The socket read/write logic is implemented with the python `asynchat`
+    module, and the `asyncore.loop()` call is made in a separate thread.
+    That threadwill not finish untill :func:`Client.disconnect` has been
+    called.
+
+
+    Examples:
 
         >>> import imb
         >>> host = 'localhost'
@@ -586,9 +593,25 @@ class Client(asynchat.async_chat):
         >>> federation = 'my federation'
         >>> 
         >>> c = imb.Client(host, port, owner_id, owner_name, federation) # Connect to a hub
+        >>>
+        >>> # Example 1: Send a file as a stream
         >>> e = c.publish('my event') # Now we can send signals on the event 
-        >>> e.signal_stream('stream name', open('test.txt', 'rb')) # Empty a file stream on the event
+        >>> e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream
         >>> e.unpublish()
+        >>>
+        >>> Example 2: Receive a stream
+        >>> def create_stream(stream_id, stream_name):
+        ...     filename = str(stream_id) + '_' + stream_name
+        ...     return open(filename, 'wb+')
+        ...
+        >>> def end_stream(stream):
+        ...     pass # do something here, just before automatic stream.close()
+        ...
+        >>> e = client.subscribe('my-stream')
+        >>> e.create_stream_callback = create_stream
+        >>> e.end_stream_callback = end_stream # this is optional, really
+        >>> # Now just wait for a stream to come flying on the event
+        >>> # And finally always disconnect:
         >>> c.disconnect()
 
     """
