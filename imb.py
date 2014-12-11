@@ -560,7 +560,7 @@ class Client(asynchat.async_chat):
     The client tries to open a socket immediately as the object is created.
     The socket read/write logic is implemented with the python `asynchat`
     module, and the `asyncore.loop()` call is made in a separate thread.
-    That threadwill not finish untill :func:`Client.disconnect` has been
+    That thread will not finish untill :func:`Client.disconnect` has been
     called.
 
 
