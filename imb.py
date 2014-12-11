@@ -574,13 +574,24 @@ class Client(asynchat.async_chat):
         >>> federation = 'my federation'
         >>> 
         >>> c = imb.Client(host, port, owner_id, owner_name, federation) # Connect to a hub
-        >>>
-        >>> # Example 1: Send a file as a stream
+        >>> # Example 1: Send a string in the payload of a NormalEvent
         >>> e = c.publish('my event') # Now we can send signals on the event 
+        >>> e.signal_event(imb.ekNormalEvent, imb.encode_string('This string is sent'))
+        >>> e.signal_string('This is easier but equivalent.')
+        >>>
+        >>> # Example 2: Receive a string in the payload of a NormalEvent
+        >>> def string_handler(payload):
+        ...     print('Received string {}'.format(imb.decode_string(payload)))
+        ...
+        >>> # Handle all ekNormalEvent signals on this event with the string_handler
+        >>> e.add_handler(imb.ekNormalEvent, string_handler)
+        >>> e.subscribe() # start listening for signals on the event
+        >>>
+        >>> # Example 3: Send a file as a stream
         >>> e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream
         >>> e.unpublish()
         >>>
-        >>> # Example 2: Receive a stream
+        >>> # Example 4: Receive a stream
         >>> def create_stream(stream_id, stream_name):
         ...     filename = str(stream_id) + '_' + stream_name
         ...     return open(filename, 'wb+')
