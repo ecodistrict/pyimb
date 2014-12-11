@@ -210,7 +210,7 @@ class EventDefinition(object):
     :class:`Client` instance and can then be used to
 
     *   subscribe/unsubscribe to the event,
-    *   publish/unpublish to the event,
+    *   publish/unpublish the event,
     *   send signals, and
     *   setup handlers for incoming signals.
 
@@ -303,28 +303,55 @@ class EventDefinition(object):
         raise NotImplementedError()
 
     def subscribe(self):
+        """Subscribe the owning Client to this event
+
+        Equivalent to `client.signal_subscribe(...)`.
+
+        This function is provided only for convenience."""
         event_entry_type = 0
         if not self._is_subscribed:
             self.client.signal_subscribe(self.event_id, event_entry_type, self.name)
             self._is_subscribed = True
 
     def unsubscribe(self):
+        """Unsubscribe the owning Client from this event
+
+        Equivalent to `client.signal_unsubscribe(...)`.
+
+        This function is provided only for convenience."""
         if self._is_subscribed:
             self.client.signal_unsubscribe(self.name)
             self._is_subscribed = False
 
     def publish(self):
+        """Publish this event with the owning Client
+
+        Equivalent to `client.signal_publish(...)`.
+
+        This function is provided only for convenience."""
         event_entry_type = 0
         if not self._is_published:
             self.client.signal_publish(self.event_id, event_entry_type, self.name)
             self._is_published = True
 
     def unpublish(self):
+        """Unpublish this event with the owning Client
+
+        Equivalent to `client.signal_unpublish(...)`.
+
+        This function is provided only for convenience."""
         if self._is_published:
             self.client.signal_unpublish(self.name)
             self._is_published = False
 
     def handle_event(self, event_kind, event_payload):
+        """Call all handlers registered for the `event_kind`.
+
+        You never have to call this function directly. It is called by the
+        owning :class:`Client` object.
+
+        See also :func:`EventDefinition.add_handler`.
+        """
         for handler in self._handlers[event_kind]:
             args = self._decode_event_payload(event_kind, event_payload)
             handler(*args)
@@ -354,11 +381,25 @@ class EventDefinition(object):
             raise NotImplementedError()
 
     def signal_event(self, event_kind, event_payload):
+        """Send a message on the event.
+
+        Args:
+            event_kind (int): One of the event kind constants, e.g. `ekNormalEvent`
+                or `ekChangeObjectEvent`.
+            event_payload (bytes or similar): The payload to send.
+        """
         if not self._is_published:
             self.publish()
         self.client.signal_normal_event(self.event_id, event_kind, event_payload)
 
     def signal_change_object(self, action, object_id, attribute):
+        """Send a ChangeObject event.
+
+        Args:
+            action (int): One of the action constants.
+            object_id (int): Id of object to change.
+            attribute (string)
+        """
         event_payload = b''.join([
             encode_int32(action),
             encode_int32(object_id),
@@ -367,7 +408,7 @@ class EventDefinition(object):
         self.signal_event(ekChangeObjectEvent, event_payload)
 
     def signal_string(self, value):
-        """Send a NormalEvent event with only a string in the payload
+        """Send a NormalEvent event with only a string in the payload.
 
         This is provided for convenience.
         Equivalent to `self.signal_event(ekNormalEvent, encode_string(value))`.
@@ -389,8 +430,16 @@ class EventDefinition(object):
 
 
     def signal_stream(self, name, stream, chunk_size=DEFAULT_STREAM_BODY_BUFFER_SIZE):
+        """Send a stream on the event.
+
+        Args:
+            name (str): A name for the stream, unique for the Client.
+            stream (stream object): The stream to be sent. Must be implemented 
+                as a standard Python stream, e.g. a file object obtained 
+                through `open(filename, 'b')`.
+            chunk_size (int, optional): Number of bytes to send in each body chunk.
+        """
         stream_id = self._hash_stream(name)
-        logging.debug('Signalling stream with stream id {0}'.format(stream_id))
 
         # header
         parts = [
@@ -431,7 +480,13 @@ class EventDefinition(object):
 
 
 class Command(object):
-    """docstring for Command"""
+    """Represents a command that can be sent by a Client
+
+    Commands are things like "subscribe to event", "publish event",
+    "signal event", etc.
+
+    You don't need to use this class directly. It is used only by 
+    the :class:`Client` class."""
     def __init__(self, command_code=None, payload=None):
         super(Command, self).__init__()
         self.command_code = command_code
@@ -448,14 +503,34 @@ class Command(object):
 
 
 class ClientStates(Enum):
-    """docstring for ClientStates"""
+    """Possible states of a :class:`Client`.
+
+    Used internally by Client.
+    """
     waiting = 0
     header = 1
     payload = 2
 
     
 class Client(asynchat.async_chat):
-    """docstring for Client"""
+    """A client that can connect to an IMB hub.
+
+    Example:
+
+        >>> import imb
+        >>> host = 'localhost'
+        >>> port = 4000
+        >>> owner_id = 123
+        >>> owner_name = 'my name'
+        >>> federation = 'my federation'
+        >>> 
+        >>> c = imb.Client(host, port, owner_id, owner_name, federation) # Connect to a hub
+        >>> e = c.publish('my event') # Now we can send signals on the event 
+        >>> e.signal_stream('stream name', open('test.txt', 'rb')) # Empty a file stream on the event
+        >>> e.unpublish()
+        >>> c.disconnect()
+
+    """
     def __init__(self, host, port, owner_id=None, owner_name=None, federation=None):
         
         self._channels_map = {}
@@ -519,13 +594,25 @@ class Client(asynchat.async_chat):
     
 
     def handle_connect(self):
+        """Called by async_chat class when the client has connected.
+
+        See docs for async_chat.
+        """
         logging.info('Connected to {0}:{1}'.format(*self.socket.getpeername()))
         super(Client, self).handle_connect()
 
     def collect_incoming_data(self, data):
+        """Called by async_chat for incoming data on the TCP socket.
+
+        See docs for async_chat.
+        """
         self._ibuffer.append(data)
 
     def found_terminator(self):
+        """Called by async_chat when a terminator sequence is received.
+
+        See docs for async_chat.
+        """
 
         # Start of command
         if self._state is ClientStates.waiting:
@@ -600,6 +687,7 @@ class Client(asynchat.async_chat):
         event.handle_event(event_kind, event_payload)
 
     def disconnect(self):
+        """Disconnect the underlying socket."""
         while self.writable():
             logging.debug('There is still data left to write. '
                 'Waiting a little before disconnecting...')
@@ -635,6 +723,12 @@ class Client(asynchat.async_chat):
         self._signal_command(Command(command_code=icUniqueClientID, payload=payload))
     
     def signal_subscribe(self, event_id, event_entry_type, event_name):
+        """Subscribe to an event.
+
+        You probably want to use :func:`Client.subscribe` or 
+        :func:`EventDefinition.subscribe` instead.
+        """
+
         payload = b''.join([
             encode_int32(event_id),
             encode_int32(event_entry_type),
@@ -643,6 +737,11 @@ class Client(asynchat.async_chat):
         self._signal_command(Command(command_code=icSubscribe, payload=payload))
 
     def signal_publish(self, event_id, event_entry_type, event_name):
+        """Publish an event.
+
+        You probably want to use :func:`Client.publish` or 
+        :func:`EventDefinition.publish` instead.
+        """
         payload = b''.join([
             encode_int32(event_id),
             encode_int32(event_entry_type),
@@ -651,16 +750,37 @@ class Client(asynchat.async_chat):
         self._signal_command(Command(command_code=icPublish, payload=payload))
 
     def signal_unsubscribe(self, event_name):
+        """Subscribe to an event.
+
+        You probably want to use :func:`Client.unsubscribe` or 
+        :func:`EventDefinition.unsubscribe` instead.
+        """
         payload = encode_string(event_name)
 
         self._signal_command(Command(command_code=icUnsubscribe, payload=payload))
 
     def signal_unpublish(self, event_name):
+        """Unpublish an event.
+
+        You probably want to use :func:`Client.unpublish` or 
+        :func:`EventDefinition.unpublish` instead.
+        """
         payload = encode_string(event_name)
 
         self._signal_command(Command(command_code=icUnpublish, payload=payload))
 
     def signal_normal_event(self, event_id, event_kind, event_payload):
+        """Send an `icEvent` command.
+
+        You probably want to use e.g. :func:`Event.signal_event` instead.
+        It will at least simplify things by supplying the `event_id` for you.
+
+        Args:
+            event_id (int): The event_id to send.
+            event_kind (int): One of the event kind constants, e.g. `ekNormalEvent`
+                or `ekChangeObjectEvent`.
+            event_payload (bytes or similar): The event payload to send along.
+        """
         payload = b''.join([
             encode_int32(event_id),
             encode_int32(0),
@@ -678,6 +798,30 @@ class Client(asynchat.async_chat):
                 event_id += 1
 
     def get_event(self, event_name, prefix=True, create=True):
+        """Get an EventDefinition object that can be used for communication.
+
+        The :class:`EventDefinition` object returned will not be subscribed
+        or published to anything.
+
+        Args:
+            event_name (str): The name of the event.
+            prefix (bool, optional): If `True`, the event name will be prefixed with
+                the client `federation` + `.`, so you get something like
+                ` my_federation.my_event_name`.
+            create (bool, optional): If `True` (the default), the event will be
+                created if it doesn't exist yet. If `False`, and the event doesn't exist
+                yet, this function will return `None`.
+
+        Returns:
+            An EventDefinition object or None.
+
+        Example:
+
+            >>> c = imb.Client(host, port, owner_id, owner_name, federation) # Connect to a hub
+            >>> e = c.get_event('my event')
+            >>> e.publish() # Now we can send signals on the event
+        """
+
         if prefix:
             event_name = self.federation + '.' + event_name
 
@@ -697,22 +841,76 @@ class Client(asynchat.async_chat):
         
 
     def subscribe(self, event_name, prefix=True):
+        """Get an EventDefinition object and ensure it is subscribed.
+
+        Args:
+            event_name (str): See docs for :func:`Client.get_event`.
+            prefix (bool, optional): See docs for :func:`Client.get_event`.
+
+        Returns:
+            A subscribed EventDefinition object.
+
+        Example:
+
+            >>> e1 = client.get_event('my_event')
+            >>> e1.subscribe()
+            >>> e2 = c.subscribe('my_event') # This gets a reference to the same object
+            >>> e1 is e2
+            True
+        """
+
         event = self.get_event(event_name, prefix=prefix)
         event.subscribe()
         return event
 
     def unsubscribe(self, event_name, prefix=True):
+        """Ensure that the client is not subscribed to an event.
+
+        Args:
+            event_name (str): See docs for :func:`Client.get_event`.
+            prefix (bool, optional): See docs for :func:`Client.get_event`.
+
+        Returns:
+            The EventDefinition object, if it already existed. Otherwise `None`.
+        """
         event = self.get_event(event_name, prefix=prefix, create=False)
         if event:
             event.unsubscribe()
         return event
 
     def publish(self, event_name, prefix=True):
+        """Get an EventDefinition object and ensure it is subscribed.
+
+        Args:
+            event_name (str): See docs for :func:`Client.get_event`.
+            prefix (bool, optional): See docs for :func:`Client.get_event`.
+
+        Returns:
+            A published EventDefinition object.
+
+        Example:
+
+            >>> # Two equivalent ways of getting a published EventDefinition object
+            >>> e1 = client.get_event('my_event')
+            >>> e1.publish()
+            >>> e2 = c.publish('my_event') # This gets a reference to the same object
+            >>> e1 is e2
+            True
+        """
         event = self.get_event(event_name, prefix=prefix)
         event.publish()
         return event
 
     def unpublish(self, event_name, prefix=True):
+        """Ensure that the client is publishing an event.
+
+        Args:
+            event_name (str): See docs for :func:`Client.get_event`.
+            prefix (bool, optional): See docs for :func:`Client.get_event`.
+
+        Returns:
+            The EventDefinition object, if it already existed. Otherwise `None`.
+        """
         event = self.get_event(event_name, prefix=prefix, create=False)
         if event:
             event.unpublish()
