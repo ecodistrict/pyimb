@@ -580,7 +580,7 @@ class Client(asynchat.async_chat):
         >>> e.signal_stream('stream name', open('test.txt', 'rb')) # Empty the file stream
         >>> e.unpublish()
         >>>
-        >>> Example 2: Receive a stream
+        >>> # Example 2: Receive a stream
         >>> def create_stream(stream_id, stream_name):
         ...     filename = str(stream_id) + '_' + stream_name
         ...     return open(filename, 'wb+')
