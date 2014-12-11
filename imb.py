@@ -367,11 +367,19 @@ class EventDefinition(object):
         self.signal_event(ekChangeObjectEvent, event_payload)
 
     def signal_string(self, value):
+        """Send a NormalEvent event with only a string in the payload
+
+        This is provided for convenience.
+        Equivalent to `self.signal_event(ekNormalEvent, encode_string(value))`.
+
+        Args:
+            value (str): The string to send.
+        """
         event_kind = ekNormalEvent
         payload = encode_string(value)
         self.signal_event(event_kind, payload)
 
-    def hash_stream(self, name):
+    def _hash_stream(self, name):
         hash64 = hash(name + repr(self.client.socket.getsockname()))
         upper = (hash64 >> 32) & 0x7FFFFFFF
         lower = hash64 & 0x7FFFFFFF
@@ -381,7 +389,7 @@ class EventDefinition(object):
 
 
     def signal_stream(self, name, stream, chunk_size=DEFAULT_STREAM_BODY_BUFFER_SIZE):
-        stream_id = self.hash_stream(name)
+        stream_id = self._hash_stream(name)
         logging.debug('Signalling stream with stream id {0}'.format(stream_id))
 
         # header
