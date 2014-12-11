@@ -1,24 +1,5 @@
 # -*- coding: utf-8 -*-
 
-"""
-Example:
-
-    >>> import imb
-    >>> host = 'localhost'
-    >>> port = 4000
-    >>> owner_id = 123
-    >>> owner_name = 'my name'
-    >>> federation = 'my federation'
-    >>> 
-    >>> c = imb.Client(host, port, owner_id, owner_name, federation) # Connect to a hub
-    >>> e1 = c.publish('my event') # Now we can send signals on the event 
-    >>> e1.signal_stream('stream name', open('test.txt', 'rb')) # Empty a file stream on the event
-    >>> e1.unpublish()
-    >>> e2 = c.subscribe('other event') # Now we will receive signals on this event
-    >>> e2.
-    >>> c.disconnect()
-
-"""
 import sys
 import threading
 import time
