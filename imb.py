@@ -599,12 +599,12 @@ class Client(asynchat.async_chat):
         >>> def end_stream(stream):
         ...     pass # do something here, just before automatic stream.close()
         ...
-        >>> e = client.subscribe('my-stream')
         >>> e.create_stream_callback = create_stream
         >>> e.end_stream_callback = end_stream # this is optional, really
         >>> # Now just wait for a stream to come flying on the event
-        >>> # And finally always disconnect:
-        >>> c.disconnect()
+        >>> # (we are already subscribed since Example 2 above!)
+        >>> e.unsubscribe() # Unsubscribe when you are done
+        >>> c.disconnect() # And finally always disconnect
 
     """
     def __init__(self, host, port, owner_id=None, owner_name=None, federation=None):
