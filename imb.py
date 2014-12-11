@@ -252,7 +252,7 @@ class EventDefinition(object):
 
     @property
     def create_stream_callback(self):
-        """Get or set a callback function for stream creation.
+        """Property: Callback function for stream creation.
 
         This property should be either `None` or a callable to be called when
         a stream header arrives on the event. The callback function should take two
@@ -262,14 +262,22 @@ class EventDefinition(object):
         If no stream object is returned from the stream callback function,
         the incoming stream will not be saved.
 
+        Note:
+            There is also a property :func:`end_stream_callback` which
+            is called at the end of the stream, just before it is closed.
+
         Example:
 
         >>> def create_stream(stream_id, stream_name):
         ...     filename = str(stream_id) + '_' + stream_name
         ...     return open(filename, 'wb+')
-        >>> 
+        ...
+        >>> def end_stream(stream):
+        ...     pass # do something here, just before automatic stream.close()
+        ...
         >>> e = client.subscribe('my-stream')
         >>> e.create_stream_callback = create_stream
+        >>> e.end_stream_callback = end_stream # this is optional, really
 
         """
         return self._create_stream_callback
@@ -278,6 +286,28 @@ class EventDefinition(object):
     def create_stream_callback(self, value):
         self._create_stream_callback = value
     
+
+    @property
+    def end_stream_callback(self):
+        """Property: Callback function for handling end of stream.
+
+        Similar to :func:`create_stream_callback`, this property should either be `None`
+        or a callable to be called when a stream tail has arrived on the event.
+        The callback function should take one argument `stream`: it will be passed
+        the same stream object that was created in :func:`create_stream_callback`.
+
+        Note:
+            The stream is automatically closed right after the `end_stream_callback`
+            function is called, so you don't have to do this manually.
+
+        Example:
+
+            See :func:`create_stream_callback` for an example.
+        """
+        return self._end_stream_callback
+    @end_stream_callback.setter
+    def end_stream_callback(self, value):
+        self._end_stream_callback = value
 
 
     def add_handler(self, event_kind, handler):
