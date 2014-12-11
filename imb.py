@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 
+"""Client to IMB hub
+
+The module is written in Python 3.4 and only tested with Python 3.4.
+Backporting to Python 2.7 should be easy. Just be careful with unicode
+strings and byte arrays.
+"""
+
 import sys
 import threading
 import time
