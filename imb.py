@@ -536,8 +536,6 @@ class Client(asynchat.async_chat):
         self._channels_map = {}
         super(Client, self).__init__(map=self._channels_map)
 
-        self.debug = True
-
         self._ibuffer = []
         self._set_state(ClientStates.waiting)
         self._command = None
