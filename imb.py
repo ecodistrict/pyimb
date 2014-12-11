@@ -748,7 +748,7 @@ class Client(asynchat.async_chat):
         self._signal_command(Command(command_code=icPublish, payload=payload))
 
     def signal_unsubscribe(self, event_name):
-        """Subscribe to an event.
+        """Unsubscribe from an event.
 
         You probably want to use :func:`Client.unsubscribe` or 
         :func:`EventDefinition.unsubscribe` instead.
