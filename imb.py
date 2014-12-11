@@ -343,7 +343,6 @@ class EventDefinition(object):
         elif event_kind == ekStreamHeader:
             stream_id = decode_int(payload[0:4])
             stream_name = decode_string(payload, 4)
-            logging.debug('Decoding: stream id: {0}; stream name: {1}'.format(stream_id, stream_name))
             return (stream_id, stream_name)
 
         elif event_kind in (ekStreamBody, ekStreamTail):
