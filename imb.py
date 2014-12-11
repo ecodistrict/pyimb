@@ -11,9 +11,11 @@ Example:
     >>> federation = 'my federation'
     >>> 
     >>> c = imb.Client(host, port, owner_id, owner_name, federation) # Connect to a hub
-    >>> e = c.publish('my event') # Now we can send signals on the event 
-    >>> e.signal_stream('stream name', open('test.txt', 'rb')) # Empty a file stream on the event
-    >>> e.unpublish()
+    >>> e1 = c.publish('my event') # Now we can send signals on the event 
+    >>> e1.signal_stream('stream name', open('test.txt', 'rb')) # Empty a file stream on the event
+    >>> e1.unpublish()
+    >>> e2 = c.subscribe('other event') # Now we will receive signals on this event
+    >>> e2.
     >>> c.disconnect()
 
 """
@@ -241,12 +243,41 @@ class EventDefinition(object):
         self._is_published = False
         self._handlers = {}
         self._streams = {}
-        self.create_stream_callback = None
-        self.end_stream_callback = None
+        self._create_stream_callback = None
+        self._end_stream_callback = None
 
         self._handlers[ekStreamHeader] = (self._handle_stream_header,)
         self._handlers[ekStreamBody] = (self._handle_stream_body,)
         self._handlers[ekStreamTail] = (self._handle_stream_tail,)
+
+    @property
+    def create_stream_callback(self):
+        """Get or set a callback function for stream creation.
+
+        This property should be either `None` or a callable to be called when
+        a stream header arrives on the event. The callback function should take two
+        arguments: `(stream_id, stream_name)`, and return a stream object to
+        save the incoming stream in.
+
+        If no stream object is returned from the stream callback function,
+        the incoming stream will not be saved.
+
+        Example:
+
+        >>> def create_stream(stream_id, stream_name):
+        ...     filename = str(stream_id) + '_' + stream_name
+        ...     return open(filename, 'wb+')
+        >>> 
+        >>> e = client.subscribe('my-stream')
+        >>> e.create_stream_callback = create_stream
+
+        """
+        return self._create_stream_callback
+
+    @create_stream_callback.setter
+    def create_stream_callback(self, value):
+        self._create_stream_callback = value
+    
 
 
     def add_handler(self, event_kind, handler):
@@ -460,8 +491,8 @@ class EventDefinition(object):
 
     def _handle_stream_header(self, stream_id, stream_name):
         # logging.debug('Handling stream HEAD.')
-        if self.create_stream_callback:
-            stream = self.create_stream_callback(stream_id, stream_name)
+        if self._create_stream_callback:
+            stream = self._create_stream_callback(stream_id, stream_name)
             if stream:
                 self._streams[stream_id] = stream
 
@@ -473,8 +504,8 @@ class EventDefinition(object):
         # logging.debug('Handling stream TAIL chunk.')
         stream = self._streams[stream_id]
         stream.write(data)
-        if self.end_stream_callback:
-            self.end_stream_callback(self, stream)
+        if self._end_stream_callback:
+            self._end_stream_callback(self, stream)
         stream.close()
         del self._streams[stream_id]
 
