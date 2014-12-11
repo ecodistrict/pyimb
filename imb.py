@@ -535,7 +535,7 @@ class EventDefinition(object):
         stream = self._streams[stream_id]
         stream.write(data)
         if self._end_stream_callback:
-            self._end_stream_callback(self, stream)
+            self._end_stream_callback(stream)
         stream.close()
         del self._streams[stream_id]
 
