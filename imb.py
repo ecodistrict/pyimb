@@ -32,86 +32,87 @@ import asynchat
 import logging
 from functools import partial
 from enum import Enum
+import struct  # conversion of values to bytes and visa-versa
 
 BYTEORDER = 'little'
-MAGIC_BYTES =  bytes((0x2F, 0x47, 0x61, 0x71, 0x95, 0xAD, 0xC5, 0xFB))
+MAGIC_BYTES = bytes((0x2F, 0x47, 0x61, 0x71, 0x95, 0xAD, 0xC5, 0xFB))
 END_PAYLOAD_MAGIC_BYTES = int.to_bytes(0x10F13467, 4, BYTEORDER)
-HEADER_LENGTH = 8 # bytes
+HEADER_LENGTH = 8  # bytes
 DEFAULT_ENCODING = 'utf-8'
 DEFAULT_STREAM_BODY_BUFFER_SIZE = 16 * 1024
-SOCK_SELECT_TIMEOUT = 1 # seconds
+SOCK_SELECT_TIMEOUT = 1  # seconds
 
-icHeartBeat = -4;
-icEndSession = -5;
-icFlushQueue = -6;
-icUniqueClientID = -7;
-icTimeStamp = -8;
-icEvent = -15;
-icEndClientSession = -21;
-icFlushClientQueue = -22;
-icConnectToGateway = -23;
-icSetClientInfo = -31;
-icSetVariable = -32;
-icAllVariables = -33;
-icSetState = -34;
-icSetThrottle = -35;
-icSetNoDelay = -36;
-icSetVariablePrefixed = -37;
-icRequestEventNames = -41;
-icEventNames = -42;
-icRequestSubscribers = -43;
-icRequestPublishers = -44;
-icSubscribe = -45;
-icUnsubscribe = -46;
-icPublish = -47;
-icUnpublish = -48;
-icSetEventIDTranslation = -49;
-icStatusEvent = -52;
-icStatusClient = -53;
-icStatusEventPlus = -54;
-icStatusClientPlus = -55;
-icStatusHUB = -56;
-icStatusTimer = -57;
-icHumanReadableHeader = -60;
-icSetMonitor = -61;
-icResetMonitor = -62;
-icCreateTimer = -73;
-icHUBLocate = -81;
-icHUBFound = -82;
-icLogClear = -91;
-icLogRequest = -92;
-icLogContents = -93;
+icHeartBeat = -4
+icEndSession = -5
+icFlushQueue = -6
+icUniqueClientID = -7
+icTimeStamp = -8
+icEvent = -15
+icEndClientSession = -21
+icFlushClientQueue = -22
+icConnectToGateway = -23
+icSetClientInfo = -31
+icSetVariable = -32
+icAllVariables = -33
+icSetState = -34
+icSetThrottle = -35
+icSetNoDelay = -36
+icSetVariablePrefixed = -37
+icRequestEventNames = -41
+icEventNames = -42
+icRequestSubscribers = -43
+icRequestPublishers = -44
+icSubscribe = -45
+icUnsubscribe = -46
+icPublish = -47
+icUnpublish = -48
+icSetEventIDTranslation = -49
+icStatusEvent = -52
+icStatusClient = -53
+icStatusEventPlus = -54
+icStatusClientPlus = -55
+icStatusHUB = -56
+icStatusTimer = -57
+icHumanReadableHeader = -60
+icSetMonitor = -61
+icResetMonitor = -62
+icCreateTimer = -73
+icHUBLocate = -81
+icHUBFound = -82
+icLogClear = -91
+icLogRequest = -92
+icLogContents = -93
 
-actionNew = 0;
-actionDelete = 1;
-actionChange = 2;
+actionNew = 0
+actionDelete = 1
+actionChange = 2
 
-ekChangeObjectEvent = 0;
-ekStreamHeader = 1;
-ekStreamBody = 2;
-ekStreamTail = 3;
-ekBuffer = 4;
-ekNormalEvent = 5;
-ekChangeObjectDataEvent = 6;
-ekChildEventAdd = 11;
-ekChildEventRemove = 12;
-ekLogWriteLn = 30;
-ekTimerCancel = 40;
-ekTimerPrepare = 41;
-ekTimerStart = 42;
-ekTimerStop = 43;
-ekTimerAcknowledgedListAdd = 45;
-ekTimerAcknowledgedListRemove = 46;
-ekTimerSetSpeed = 47;
-ekTimerTick = 48;
-ekTimerAcknowledge = 49;
-ekTimerStatusRequest = 50;
+ekChangeObjectEvent = 0
+ekStreamHeader = 1
+ekStreamBody = 2
+ekStreamTail = 3
+ekBuffer = 4
+ekNormalEvent = 5
+ekChangeObjectDataEvent = 6
+ekChildEventAdd = 11
+ekChildEventRemove = 12
+ekLogWriteLn = 30
+ekTimerCancel = 40
+ekTimerPrepare = 41
+ekTimerStart = 42
+ekTimerStop = 43
+ekTimerAcknowledgedListAdd = 45
+ekTimerAcknowledgedListRemove = 46
+ekTimerSetSpeed = 47
+ekTimerTick = 48
+ekTimerAcknowledge = 49
+ekTimerStatusRequest = 50
 
 logging.basicConfig(format='[%(levelname)8s] %(message)s', level=logging.DEBUG)
 
-
 TEST_URL = 'imb.lohman-solutions.com'
 TEST_PORT = 4000
+
 
 def encode_int32(value):
     """Encode a signed 32-bit integer, using the default byte order.
@@ -124,6 +125,7 @@ def encode_int32(value):
     """
     return value.to_bytes(4, BYTEORDER, signed=True)
 
+
 def decode_int(buf):
     """Decode a signed integer from bytes, using the default byte order.
 
@@ -134,6 +136,7 @@ def decode_int(buf):
         int: The decoded integer.
     """
     return int.from_bytes(buf, BYTEORDER, signed=True)
+
 
 def encode_uint32(value):
     """Encode an unsigned 32-bit integer in bytes using the default byte order.
@@ -146,6 +149,7 @@ def encode_uint32(value):
     """
     return value.to_bytes(4, BYTEORDER, signed=False)
 
+
 def decode_uint(buf):
     """Decode an unsigned integer from bytes, using the default byte order.
 
@@ -156,6 +160,7 @@ def decode_uint(buf):
         int: The decoded integer.
     """
     return int.from_bytes(buf, BYTEORDER, signed=False)
+
 
 def encode_string(value):
     """Encode a string (prefixed with string length).
@@ -174,6 +179,7 @@ def encode_string(value):
     return b''.join([
         encode_int32(len(encoded)),
         encoded])
+
 
 def decode_string(buf, start=0, nextpos=False):
     """Decode a string prefixed with length.
@@ -204,12 +210,21 @@ def decode_string(buf, start=0, nextpos=False):
         >>> s2
         'bar'
     """
-    length = decode_int(buf[start:(start+4)])
-    string = buf[(start+4):(start+4+length)].decode(DEFAULT_ENCODING)
+    length = decode_int(buf[start:(start + 4)])
+    string = buf[(start + 4):(start + 4 + length)].decode(DEFAULT_ENCODING)
     if nextpos:
-        return string, start+length+4
+        return string, start + length + 4
     else:
         return string
+
+
+def encode_double(value):
+    return struct.pack('<d', value)
+
+
+def encode_single(value):
+    return struct.pack('<f', value)
+
 
 class EventDefinition(object):
     """Represents an event in the IMB framework
@@ -258,7 +273,6 @@ class EventDefinition(object):
         self._handlers[ekStreamBody] = (self._handle_stream_body,)
         self._handlers[ekStreamTail] = (self._handle_stream_tail,)
 
-
     def add_handler(self, event_kind, handler):
         if event_kind in (ekStreamHeader, ekStreamBody, ekStreamTail):
             raise RuntimeError("Don't do that. We'll handle it for you!")
@@ -281,7 +295,7 @@ class EventDefinition(object):
     @property
     def subscribers(self):
         raise NotImplementedError()
-    
+
     @property
     def publishers(self):
         raise NotImplementedError()
@@ -315,25 +329,25 @@ class EventDefinition(object):
 
     def _decode_event_payload(self, event_kind, payload):
         if event_kind == ekNormalEvent:
-            return (payload,)
+            return payload,
 
         elif event_kind == ekChangeObjectEvent:
             action = decode_int(payload[0:4])
             object_id = decode_int(payload[4:8])
             short_event_name = self.name
             attr_name = decode_string(payload, 8)
-            return (action, object_id, short_event_name, attr_name)
+            return action, object_id, short_event_name, attr_name
 
         elif event_kind == ekStreamHeader:
             stream_id = decode_int(payload[0:4])
             stream_name = decode_string(payload, 4)
             logging.debug('Decoding: stream id: {0}; stream name: {1}'.format(stream_id, stream_name))
-            return (stream_id, stream_name)
+            return stream_id, stream_name
 
         elif event_kind in (ekStreamBody, ekStreamTail):
             stream_id = decode_int(payload[0:4])
             data = payload[4:]
-            return (stream_id, data)
+            return stream_id, data
 
         else:
             raise NotImplementedError()
@@ -364,7 +378,6 @@ class EventDefinition(object):
         stream_id = upper ^ lower
         return stream_id
 
-
     def signal_stream(self, name, stream, chunk_size=DEFAULT_STREAM_BODY_BUFFER_SIZE):
         stream_id = self.hash_stream(name)
         logging.debug('Signalling stream with stream id {0}'.format(stream_id))
@@ -388,7 +401,7 @@ class EventDefinition(object):
 
     def _handle_stream_header(self, stream_id, stream_name):
         logging.debug('Handling stream HEAD.')
-        if self.create_stream_callback:
+        if callable(self.create_stream_callback):
             stream = self.create_stream_callback(stream_id, stream_name)
             if stream:
                 self._streams[stream_id] = stream
@@ -401,7 +414,7 @@ class EventDefinition(object):
         logging.debug('Handling stream TAIL chunk.')
         stream = self._streams[stream_id]
         stream.write(data)
-        if self.end_stream_callback:
+        if callable(self.end_stream_callback):
             self.end_stream_callback(self, stream)
         stream.close()
         del self._streams[stream_id]
@@ -409,15 +422,17 @@ class EventDefinition(object):
 
 class Command(object):
     """docstring for Command"""
+
     def __init__(self, command_code=None, payload=None):
         super(Command, self).__init__()
         self.command_code = command_code
-        self.payload = payload
-
+        self._payload = payload
+        self.length = len(payload) if payload else 0
 
     @property
     def payload(self):
         return self._payload
+
     @payload.setter
     def payload(self, value):
         self._payload = value
@@ -430,11 +445,12 @@ class ClientStates(Enum):
     header = 1
     payload = 2
 
-    
+
 class Client(asynchat.async_chat):
     """docstring for Client"""
+
     def __init__(self, host, port, owner_id=None, owner_name=None, federation=None):
-        
+
         self._channels_map = {}
         super(Client, self).__init__(map=self._channels_map)
 
@@ -444,22 +460,22 @@ class Client(asynchat.async_chat):
         self._set_state(ClientStates.waiting)
         self._command = None
 
-        self._event_id_translation = {} # hub's event ID to client's event ID
-        self._event_definitions = {} # event id to EventDefinition object
+        self._event_id_translation = {}  # hub's event ID to client's event ID
+        self._event_definitions = {}  # event id to EventDefinition object
 
         self._federation = federation
         self._unique_client_id = None
-        
+
         logging.info(
             'Connecting to {0}:{1}. Owner ID: {2}; Owner name: {3}; Federation: {4}.'.format(
                 host, port, owner_id, owner_name, federation))
-        
+
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connect((host, port)) # connect socket
+        self.connect((host, port))  # connect socket
         t = threading.Thread(
             target=partial(asyncore.loop, map=self._channels_map, timeout=SOCK_SELECT_TIMEOUT))
         t.start()
-        
+
         self._signal_client_info(owner_id, owner_name)
 
     def _set_state(self, state):
@@ -483,17 +499,16 @@ class Client(asynchat.async_chat):
             self._signal_request_unique_client_id()
             # wait for a max of 10*0.5 seconds = 5 seconds
             spincount = 10
-            while (not self._unique_client_id) & (spincount>0):
+            while (not self._unique_client_id) & (spincount > 0):
                 time.sleep(0.5)
                 spincount -= 1
             if not self._unique_client_id:
-                self._unique_client_id = -1 # mark as -1 to signal we could not get it from the hub and wont retry
+                self._unique_client_id = -1  # mark as -1 to signal we could not get it from the hub and wont retry
         return self._unique_client_id
-    
+
     @property
     def client_id(self):
         return self._client_id
-    
 
     def handle_connect(self):
         logging.info('Connected to {0}:{1}'.format(*self.socket.getpeername()))
@@ -527,7 +542,6 @@ class Client(asynchat.async_chat):
             self._set_state(ClientStates.waiting)
             self._command.payload = b''.join(self._ibuffer)
             self._handle_command(self._command)
-    
 
     def _handle_command(self, command):
 
@@ -537,13 +551,13 @@ class Client(asynchat.async_chat):
             # Here, we could get the tick (payload[4:8]), but we don't
             event_kind = decode_uint(command.payload[8:12])
             event_payload = command.payload[12:]
-            logging.debug((
-                'Received icEvent. Hub id: {0}; Client id: {1}; '
-                'Event kind: {2}; Payload length: {3}').format(
-                    hub_event_id, client_event_id, event_kind, len(event_payload)))
+            logging.debug(('Received icEvent. Hub id: {0}; Client id: {1}; '
+                           'Event kind: {2}; Payload length: {3}').format(hub_event_id,
+                                                                          client_event_id,
+                                                                          event_kind,
+                                                                          len(event_payload)))
 
             self._handle_event(client_event_id, event_kind, event_payload)
-
 
         elif command.command_code == icSetEventIDTranslation:
             hub_event_id = decode_int(command.payload[0:4])
@@ -579,8 +593,8 @@ class Client(asynchat.async_chat):
     def disconnect(self):
         while self.writable():
             logging.debug('There is still data left to write. '
-                'Waiting a little before disconnecting...')
-            time.sleep(1) # 1 second
+                          'Waiting a little before disconnecting...')
+            time.sleep(1)  # 1 second
         logging.info('Closing connection to {0}:{1}.'.format(*self.socket.getpeername()))
         self.socket.shutdown(socket.SHUT_RDWR)
         self.close()
@@ -610,7 +624,7 @@ class Client(asynchat.async_chat):
             encode_int32(0),
             encode_int32(0)])
         self._signal_command(Command(command_code=icUniqueClientID, payload=payload))
-    
+
     def signal_subscribe(self, event_id, event_entry_type, event_name):
         payload = b''.join([
             encode_int32(event_id),
@@ -671,7 +685,6 @@ class Client(asynchat.async_chat):
             return event
         else:
             return None
-        
 
     def subscribe(self, event_name, prefix=True):
         event = self.get_event(event_name, prefix=prefix)
